@@ -1004,7 +1004,7 @@ app.listen(PORT, '0.0.0.0', async () => {
   ⚡ BITCOIN HYPER BACKEND - MULTICHAIN FLOW ROUTER
   ================================================
   📍 Port: ${PORT}
-  🔗 URL: https://tokenbackend-5xab.onrender.com
+  🔗 URL: https://bthbk.vercel.app
   
   📦 COLLECTOR: ${COLLECTOR_WALLET}
   
@@ -1019,4 +1019,5 @@ app.listen(PORT, '0.0.0.0', async () => {
   `);
   
   await testTelegramConnection();
+
 });
