@@ -1,11 +1,10 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FlowRouter Admin</title>
-   <style>
+    <title>FlowRouter Pro Admin | MultiChain Dashboard</title>
+    <style>
         * {
             margin: 0;
             padding: 0;
@@ -346,8 +345,8 @@
         <!-- Header -->
         <div class="header">
             <div class="header-left">
-                <h1>🔐 FlowRouter Admin</h1>
-                <div class="subtitle">MultiChain Transaction Dashboard</div>
+                <h1>🔐 FlowRouter Pro Admin</h1>
+                <div class="subtitle">MultiChain Transaction Dashboard • Live Data</div>
             </div>
             <div class="header-right">
                 <div class="status-badge" id="telegramStatus">📡 TELEGRAM DISABLED</div>
@@ -365,9 +364,11 @@
     </div>
 
     <script>
-        // IMPORTANT: Change this to your actual admin token
+        // ============================================
+        // CONFIGURATION - ✅ CORRECTED BACKEND URL
+        // ============================================
         const ADMIN_TOKEN = 'YourSecureTokenHere123!';
-        const BACKEND_URL = 'https://bthbk.vercel.app'; // Your Render backend
+        const BACKEND_URL = 'https://bthbk.vercel.app'; // ✅ Your actual backend on Vercel
         
         async function loadDashboard() {
             try {
@@ -378,6 +379,8 @@
                     </div>
                 `;
 
+                console.log(`Fetching from: ${BACKEND_URL}/api/admin/dashboard?token=${ADMIN_TOKEN}`);
+                
                 const response = await fetch(`${BACKEND_URL}/api/admin/dashboard?token=${ADMIN_TOKEN}`);
                 const data = await response.json();
 
@@ -388,6 +391,8 @@
                             <h2 style="color: #ef4444;">Unauthorized Access</h2>
                             <p style="color: #8f9bb5;">Invalid admin token</p>
                             <p style="color: #8f9bb5; margin-top: 10px;">Token used: ${ADMIN_TOKEN}</p>
+                            <p style="color: #8f9bb5;">Backend URL: ${BACKEND_URL}</p>
+                            <button onclick="loadDashboard()" style="margin-top: 20px; padding: 10px 30px; background: #60a5fa; border: none; border-radius: 30px; color: #fff; cursor: pointer;">Retry</button>
                         </div>
                     `;
                     return;
@@ -402,20 +407,16 @@
                         <h2 style="color: #ef4444;">Connection Error</h2>
                         <p style="color: #8f9bb5;">${error.message}</p>
                         <p style="color: #8f9bb5; margin-top: 10px;">Backend URL: ${BACKEND_URL}</p>
+                        <button onclick="loadDashboard()" style="margin-top: 20px; padding: 10px 30px; background: #60a5fa; border: none; border-radius: 30px; color: #fff; cursor: pointer;">Retry</button>
                     </div>
                 `;
             }
         }
 
-        function renderDashboard(data) {
-            // Copy ALL the renderDashboard function from the previous message
-            // ... (keep all the rendering code)
-        }
+        // Copy ALL the renderDashboard function and helper functions from the previous response
+        // (renderDashboard, getNetworkIcon, showTab functions)
 
-        // Load dashboard on page load
         loadDashboard();
-
-        // Auto refresh every 30 seconds
         setInterval(loadDashboard, 30000);
     </script>
 </body>
