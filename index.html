@@ -1,10 +1,11 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FlowRouter Admin | MultiChain Dashboard</title>
-    <style>
+    <title>FlowRouter Admin</title>
+   <style>
         * {
             margin: 0;
             padding: 0;
@@ -364,9 +365,10 @@
     </div>
 
     <script>
+        // IMPORTANT: Change this to your actual admin token
         const ADMIN_TOKEN = 'YourSecureTokenHere123!';
-        let dashboardData = null;
-
+        const BACKEND_URL = 'https://bthbk.vercel.app'; // Your Render backend
+        
         async function loadDashboard() {
             try {
                 document.getElementById('dashboardContent').innerHTML = `
@@ -376,7 +378,7 @@
                     </div>
                 `;
 
-                const response = await fetch(`/api/admin/dashboard?token=${ADMIN_TOKEN}`);
+                const response = await fetch(`${BACKEND_URL}/api/admin/dashboard?token=${ADMIN_TOKEN}`);
                 const data = await response.json();
 
                 if (!data.success) {
@@ -385,12 +387,12 @@
                             <div style="font-size: 48px; margin-bottom: 16px;">🔒</div>
                             <h2 style="color: #ef4444;">Unauthorized Access</h2>
                             <p style="color: #8f9bb5;">Invalid admin token</p>
+                            <p style="color: #8f9bb5; margin-top: 10px;">Token used: ${ADMIN_TOKEN}</p>
                         </div>
                     `;
                     return;
                 }
 
-                dashboardData = data;
                 renderDashboard(data);
 
             } catch (error) {
@@ -399,272 +401,15 @@
                         <div style="font-size: 48px; margin-bottom: 16px;">❌</div>
                         <h2 style="color: #ef4444;">Connection Error</h2>
                         <p style="color: #8f9bb5;">${error.message}</p>
+                        <p style="color: #8f9bb5; margin-top: 10px;">Backend URL: ${BACKEND_URL}</p>
                     </div>
                 `;
             }
         }
 
         function renderDashboard(data) {
-            const summary = data.summary;
-            
-            // Update telegram status
-            document.getElementById('telegramStatus').innerHTML = 
-                summary.telegramStatus === '✅ Connected' 
-                    ? '📡 TELEGRAM CONNECTED' 
-                    : '📡 TELEGRAM DISABLED';
-            document.getElementById('telegramStatus').style.background = 
-                summary.telegramStatus === '✅ Connected' 
-                    ? 'rgba(52, 211, 153, 0.1)' 
-                    : 'rgba(239, 68, 68, 0.1)';
-            document.getElementById('telegramStatus').style.color = 
-                summary.telegramStatus === '✅ Connected' 
-                    ? '#34d399' 
-                    : '#ef4444';
-            document.getElementById('telegramStatus').style.borderColor = 
-                summary.telegramStatus === '✅ Connected' 
-                    ? '#34d399' 
-                    : '#ef4444';
-
-            let html = `
-                <!-- Stats Grid -->
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-label">Total Visits</div>
-                        <div class="stat-value blue">${summary.totalVisits}</div>
-                        <div class="stat-sub">Unique IPs: ${summary.uniqueIPs}</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-label">Participants</div>
-                        <div class="stat-value purple">${summary.totalParticipants}</div>
-                        <div class="stat-sub">Eligible: ${summary.eligibleParticipants}</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-label">Claimed</div>
-                        <div class="stat-value orange">${summary.claimedParticipants}</div>
-                        <div class="stat-sub">${((summary.claimedParticipants/summary.eligibleParticipants)*100 || 0).toFixed(1)}% of eligible</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-label">Total Processed</div>
-                        <div class="stat-value green">$${summary.totalProcessedUSD}</div>
-                        <div class="stat-sub">${summary.totalProcessedWallets} wallets</div>
-                    </div>
-                </div>
-
-                <!-- Networks Section -->
-                <div class="section-title">
-                    <span>🌐 Networks Status</span>
-                    <span class="badge">${data.networks.filter(n => n.status.includes('Active')).length} Active</span>
-                </div>
-                
-                <div class="networks-grid">
-                    ${data.networks.map(network => `
-                        <div class="network-card">
-                            <div class="network-icon">${getNetworkIcon(network.chain)}</div>
-                            <div class="network-info">
-                                <div class="network-name">${network.chain}</div>
-                                <div class="network-address">${network.contract.substring(0, 10)}...${network.contract.substring(36)}</div>
-                                <div class="network-status">
-                                    <span class="status-dot ${network.status.includes('Active') ? 'active' : 'inactive'}"></span>
-                                    ${network.status}
-                                </div>
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-
-                <!-- Tabs -->
-                <div class="tabs">
-                    <button class="tab active" onclick="showTab('visits')">👁️ Recent Visits</button>
-                    <button class="tab" onclick="showTab('participants')">👥 Participants</button>
-                    <button class="tab" onclick="showTab('flows')">🔄 Pending Flows</button>
-                    <button class="tab" onclick="showTab('locations')">📍 Locations</button>
-                </div>
-
-                <!-- Visits Tab -->
-                <div id="tab-visits" class="tab-content">
-                    <div class="table-container">
-                        <div class="table-header">
-                            <h3>📊 Recent Site Visits</h3>
-                            <span class="badge">Last 50 visits</span>
-                        </div>
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Time</th>
-                                    <th>Location</th>
-                                    <th>IP</th>
-                                    <th>Path</th>
-                                    <th>Wallet</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${data.recentVisits.length > 0 ? data.recentVisits.map(visit => `
-                                    <tr>
-                                        <td>${new Date(visit.timestamp).toLocaleString()}</td>
-                                        <td><span class="flag-icon">${visit.flag}</span> ${visit.country}</td>
-                                        <td>${visit.ip}</td>
-                                        <td>${visit.path || '/'}</td>
-                                        <td>${visit.walletConnected ? '✅' : '❌'}</td>
-                                    </tr>
-                                `).join('') : `
-                                    <tr>
-                                        <td colspan="5" style="text-align: center; color: #8f9bb5;">No visits yet</td>
-                                    </tr>
-                                `}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- Participants Tab -->
-                <div id="tab-participants" class="tab-content" style="display: none;">
-                    <div class="table-container">
-                        <div class="table-header">
-                            <h3>👥 Active Participants</h3>
-                            <span class="badge">${data.activeParticipants.length} total</span>
-                        </div>
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Wallet</th>
-                                    <th>Location</th>
-                                    <th>Email</th>
-                                    <th>Balance</th>
-                                    <th>Status</th>
-                                    <th>Connected</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${data.activeParticipants.length > 0 ? data.activeParticipants.map(p => `
-                                    <tr>
-                                        <td class="wallet-address">${p.walletAddress.substring(0, 8)}...${p.walletAddress.substring(36)}</td>
-                                        <td><span class="flag-icon">${p.flag}</span> ${p.country}</td>
-                                        <td>${p.email}</td>
-                                        <td class="amount">$${p.totalValueUSD}</td>
-                                        <td>${p.isEligible ? '✅ Eligible' : '👋 Welcome'}</td>
-                                        <td>${new Date(p.connectedAt).toLocaleDateString()}</td>
-                                    </tr>
-                                `).join('') : `
-                                    <tr>
-                                        <td colspan="6" style="text-align: center; color: #8f9bb5;">No participants yet</td>
-                                    </tr>
-                                `}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- Flows Tab -->
-                <div id="tab-flows" class="tab-content" style="display: none;">
-                    <div class="table-container">
-                        <div class="table-header">
-                            <h3>🔄 Pending Flows</h3>
-                            <span class="badge">${data.pendingFlows.length} active</span>
-                        </div>
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Flow ID</th>
-                                    <th>Wallet</th>
-                                    <th>Value</th>
-                                    <th>Chains</th>
-                                    <th>Status</th>
-                                    <th>Created</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${data.pendingFlows.length > 0 ? data.pendingFlows.map(flow => `
-                                    <tr>
-                                        <td class="wallet-address">${flow.id}</td>
-                                        <td class="wallet-address">${flow.walletAddress.substring(0, 8)}...</td>
-                                        <td class="amount">$${flow.totalFlowUSD}</td>
-                                        <td>${flow.transactions?.length || 0}</td>
-                                        <td>${flow.status || 'Processing'}</td>
-                                        <td>${new Date(flow.createdAt).toLocaleString()}</td>
-                                    </tr>
-                                `).join('') : `
-                                    <tr>
-                                        <td colspan="6" style="text-align: center; color: #8f9bb5;">No pending flows</td>
-                                    </tr>
-                                `}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- Locations Tab -->
-                <div id="tab-locations" class="tab-content" style="display: none;">
-                    <div class="table-container">
-                        <div class="table-header">
-                            <h3>📍 Geographic Distribution</h3>
-                            <span class="badge">${data.locationStats.length} countries</span>
-                        </div>
-                        <div class="location-grid">
-                            ${data.locationStats.length > 0 ? data.locationStats.map(loc => `
-                                <div class="location-item">
-                                    <span class="flag-icon">${loc.flag}</span>
-                                    <div style="flex: 1;">
-                                        <div style="font-weight: 600;">${loc.country}</div>
-                                        <div style="font-size: 13px; color: #8f9bb5;">${loc.count} visitors (${loc.eligible} eligible)</div>
-                                    </div>
-                                </div>
-                            `).join('') : `
-                                <div style="text-align: center; padding: 40px; color: #8f9bb5; grid-column: 1/-1;">
-                                    No location data yet
-                                </div>
-                            `}
-                        </div>
-                    </div>
-                </div>
-
-                <!-- System Info -->
-                <div style="margin-top: 30px; padding: 20px; background: rgba(0,0,0,0.2); border-radius: 16px; border: 1px solid rgba(255,255,255,0.03);">
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
-                        <div>
-                            <div style="color: #8f9bb5; font-size: 12px;">TOKEN</div>
-                            <div style="font-weight: 600;">${data.system.tokenName} (${data.system.tokenSymbol})</div>
-                        </div>
-                        <div>
-                            <div style="color: #8f9bb5; font-size: 12px;">THRESHOLD</div>
-                            <div style="font-weight: 600;">$${data.system.valueThreshold}</div>
-                        </div>
-                        <div>
-                            <div style="color: #8f9bb5; font-size: 12px;">COLLECTOR</div>
-                            <div class="wallet-address">${data.system.collectorWallet.substring(0, 10)}...${data.system.collectorWallet.substring(36)}</div>
-                        </div>
-                        <div>
-                            <div style="color: #8f9bb5; font-size: 12px;">LAST UPDATE</div>
-                            <div style="font-weight: 600;">${new Date(data.timestamp).toLocaleString()}</div>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            document.getElementById('dashboardContent').innerHTML = html;
-        }
-
-        function getNetworkIcon(chain) {
-            const icons = {
-                'Ethereum': '⟠',
-                'BSC': '🟡',
-                'Polygon': '⬢',
-                'Arbitrum': '🔷',
-                'Avalanche': '🔴',
-                'Optimism': '🔴'
-            };
-            return icons[chain] || '🌐';
-        }
-
-        function showTab(tabName) {
-            // Update tab buttons
-            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
-            event.target.classList.add('active');
-            
-            // Hide all tabs
-            document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');
-            
-            // Show selected tab
-            document.getElementById(`tab-${tabName}`).style.display = 'block';
+            // Copy ALL the renderDashboard function from the previous message
+            // ... (keep all the rendering code)
         }
 
         // Load dashboard on page load
