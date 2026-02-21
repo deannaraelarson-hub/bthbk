@@ -1,0 +1,1377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bitcoin Hyper Admin Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary: #F7931A;
+            --primary-dark: #D17C0F;
+            --bg-dark: #0f172a;
+            --bg-card: #1e293b;
+            --text: #e2e8f0;
+            --text-muted: #94a3b8;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --border: #334155;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text);
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        /* Header */
+        .header {
+            background: var(--bg-card);
+            border-bottom: 2px solid var(--primary);
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .logo-icon {
+            font-size: 32px;
+            animation: bitcoinGlow 2s infinite;
+        }
+        
+        @keyframes bitcoinGlow {
+            0%, 100% { filter: drop-shadow(0 0 10px var(--primary)); }
+            50% { filter: drop-shadow(0 0 25px var(--primary)); }
+        }
+        
+        .logo-text h1 {
+            background: linear-gradient(45deg, var(--primary), #FFD700);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-size: 24px;
+        }
+        
+        /* Login Screen */
+        .login-screen {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, #1a1a1a 100%);
+        }
+        
+        .login-box {
+            background: var(--bg-card);
+            padding: 40px;
+            border-radius: 20px;
+            border: 2px solid var(--primary);
+            width: 100%;
+            max-width: 400px;
+        }
+        
+        .login-box h2 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: var(--primary);
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-muted);
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 12px 15px;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 16px;
+        }
+        
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(45deg, var(--primary), #FFD700);
+            color: black;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(247, 147, 26, 0.4);
+        }
+        
+        /* Dashboard Grid */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: var(--bg-card);
+            padding: 25px;
+            border-radius: 15px;
+            border: 1px solid var(--border);
+        }
+        
+        .stat-card h3 {
+            color: var(--text-muted);
+            font-size: 14px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .stat-trend {
+            font-size: 14px;
+            color: var(--success);
+        }
+        
+        .stat-trend.negative {
+            color: var(--danger);
+        }
+        
+        /* Tables */
+        .table-container {
+            background: var(--bg-card);
+            border-radius: 15px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+            margin-bottom: 30px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th {
+            background: var(--bg-dark);
+            padding: 15px;
+            text-align: left;
+            color: var(--text-muted);
+            font-weight: 600;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        td {
+            padding: 15px;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        tr:hover {
+            background: rgba(247, 147, 26, 0.05);
+        }
+        
+        /* Charts */
+        .chart-container {
+            background: var(--bg-card);
+            padding: 25px;
+            border-radius: 15px;
+            border: 1px solid var(--border);
+            margin-bottom: 30px;
+        }
+        
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            background: var(--bg-card);
+            padding: 10px;
+            border-radius: 10px;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .tab.active {
+            background: var(--primary);
+            color: black;
+            border-color: var(--primary);
+        }
+        
+        /* Tab Content */
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        /* Settings Form */
+        .settings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .settings-card {
+            background: var(--bg-card);
+            padding: 25px;
+            border-radius: 15px;
+            border: 1px solid var(--border);
+        }
+        
+        .settings-card h3 {
+            color: var(--primary);
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        /* Status Indicators */
+        .status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .status.success {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--success);
+        }
+        
+        .status.warning {
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--warning);
+        }
+        
+        .status.danger {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--danger);
+        }
+        
+        /* Notification */
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 10px;
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        }
+        
+        .notification.success {
+            background: var(--success);
+        }
+        
+        .notification.error {
+            background: var(--danger);
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-box">
+            <div class="logo" style="justify-content: center; margin-bottom: 30px;">
+                <div class="logo-icon">₿</div>
+                <div class="logo-text">
+                    <h1>BITCOIN HYPER</h1>
+                    <div style="color: var(--text-muted); font-size: 14px;">Admin Dashboard</div>
+                </div>
+            </div>
+            
+            <form id="loginForm">
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" id="username" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="password" required>
+                </div>
+                
+                <button type="submit" class="btn btn-primary" style="width: 100%;">
+                    Login to Dashboard
+                </button>
+            </form>
+            
+            <div style="margin-top: 20px; text-align: center; color: var(--text-muted); font-size: 12px;">
+                Secure access only for authorized personnel
+            </div>
+        </div>
+    </div>
+    
+    <!-- Dashboard -->
+    <div id="dashboard" style="display: none;">
+        <div class="container">
+            <!-- Header -->
+            <div class="header">
+                <div class="logo">
+                    <div class="logo-icon">₿</div>
+                    <div class="logo-text">
+                        <h1>BITCOIN HYPER ADMIN</h1>
+                        <div style="color: var(--text-muted); font-size: 14px;">Real-time Presale Analytics</div>
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: 15px; align-items: center;">
+                    <div id="lastUpdate" style="color: var(--text-muted); font-size: 14px;">
+                        Last update: Just now
+                    </div>
+                    <button onclick="logout()" class="btn" style="background: var(--danger); color: white;">
+                        Logout
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('overview')">📊 Overview</button>
+                <button class="tab" onclick="switchTab('participants')">👥 Participants</button>
+                <button class="tab" onclick="switchTab('analytics')">📈 Analytics</button>
+                <button class="tab" onclick="switchTab('settings')">⚙️ Settings</button>
+                <button class="tab" onclick="switchTab('export')">📤 Export</button>
+            </div>
+            
+            <!-- Overview Tab -->
+            <div id="overview" class="tab-content active">
+                <!-- Stats Grid -->
+                <div class="dashboard-grid">
+                    <div class="stat-card">
+                        <h3>Total Participants</h3>
+                        <div class="stat-value" id="totalParticipants">0</div>
+                        <div class="stat-trend" id="participantsTrend">+0 today</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <h3>Eligible Wallets</h3>
+                        <div class="stat-value" id="eligibleWallets">0</div>
+                        <div class="stat-trend" id="eligibleTrend">0% conversion</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <h3>Total Raised</h3>
+                        <div class="stat-value" id="totalRaised">$0</div>
+                        <div class="stat-trend" id="raisedTrend">+$0 today</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <h3>Success Rate</h3>
+                        <div class="stat-value" id="successRate">0%</div>
+                        <div class="stat-trend" id="rateTrend">Real-time</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <h3>Active Now</h3>
+                        <div class="stat-value" id="activeNow">0</div>
+                        <div class="stat-trend">Live connections</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <h3>Top Country</h3>
+                        <div class="stat-value" id="topCountry">USA</div>
+                        <div class="stat-trend" id="countryStats">0 participants</div>
+                    </div>
+                </div>
+                
+                <!-- Charts -->
+                <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px; margin-bottom: 30px;">
+                    <div class="chart-container">
+                        <h3 style="margin-bottom: 20px;">📈 Hourly Activity</h3>
+                        <canvas id="activityChart"></canvas>
+                    </div>
+                    
+                    <div class="chart-container">
+                        <h3 style="margin-bottom: 20px;">🌍 Geographic Distribution</h3>
+                        <canvas id="geoChart"></canvas>
+                    </div>
+                </div>
+                
+                <!-- Recent Activity -->
+                <div class="table-container">
+                    <h3 style="padding: 20px; margin: 0; border-bottom: 1px solid var(--border);">
+                        🕐 Recent Activity (Last 24 Hours)
+                    </h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Wallet</th>
+                                <th>Action</th>
+                                <th>IP Address</th>
+                                <th>Country</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recentActivity">
+                            <!-- Will be populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Participants Tab -->
+            <div id="participants" class="tab-content">
+                <div class="table-container">
+                    <div style="padding: 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);">
+                        <h3 style="margin: 0;">👥 All Participants</h3>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="searchParticipants" placeholder="Search wallet or IP..." style="padding: 8px 15px; background: var(--bg-dark); border: 1px solid var(--border); border-radius: 8px; color: var(--text);">
+                            <button onclick="refreshParticipants()" class="btn btn-primary">Refresh</button>
+                        </div>
+                    </div>
+                    <div style="max-height: 500px; overflow-y: auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Wallet</th>
+                                    <th>Portfolio</th>
+                                    <th>Allocation</th>
+                                    <th>Status</th>
+                                    <th>Location</th>
+                                    <th>Connected</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="participantsList">
+                                <!-- Will be populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Analytics Tab -->
+            <div id="analytics" class="tab-content">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
+                    <div class="chart-container">
+                        <h3 style="margin-bottom: 20px;">📊 Conversion Funnel</h3>
+                        <canvas id="funnelChart"></canvas>
+                    </div>
+                    
+                    <div class="chart-container">
+                        <h3 style="margin-bottom: 20px;">📱 User Agents</h3>
+                        <canvas id="deviceChart"></canvas>
+                    </div>
+                </div>
+                
+                <div class="table-container">
+                    <h3 style="padding: 20px; margin: 0; border-bottom: 1px solid var(--border);">
+                        🔍 Detailed Analytics
+                    </h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Metric</th>
+                                <th>Value</th>
+                                <th>Trend</th>
+                                <th>Change</th>
+                                <th>Insight</th>
+                            </tr>
+                        </thead>
+                        <tbody id="analyticsData">
+                            <!-- Will be populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Settings Tab -->
+            <div id="settings" class="tab-content">
+                <div class="settings-grid">
+                    <!-- Token Settings -->
+                    <div class="settings-card">
+                        <h3>💰 Token Settings</h3>
+                        <div class="form-group">
+                            <label>Token Name</label>
+                            <input type="text" id="tokenName" value="Bitcoin Hyper">
+                        </div>
+                        <div class="form-group">
+                            <label>Token Symbol</label>
+                            <input type="text" id="tokenSymbol" value="BTH">
+                        </div>
+                        <div class="form-group">
+                            <label>Presale Price (USD)</label>
+                            <input type="number" id="tokenPrice" value="0.17" step="0.01">
+                        </div>
+                        <div class="form-group">
+                            <label>Minimum Eligibility ($)</label>
+                            <input type="number" id="minEligibility" value="10">
+                        </div>
+                    </div>
+                    
+                    <!-- Telegram Settings -->
+                    <div class="settings-card">
+                        <h3>🤖 Telegram Bot</h3>
+                        <div class="form-group">
+                            <label>Bot Token</label>
+                            <input type="text" id="telegramToken" placeholder="BotFather token">
+                        </div>
+                        <div class="form-group">
+                            <label>Chat ID</label>
+                            <input type="text" id="telegramChatId" placeholder="-1001234567890">
+                        </div>
+                        <div class="form-group">
+                            <label style="display: flex; align-items: center; gap: 10px;">
+                                <input type="checkbox" id="telegramEnabled">
+                                Enable Notifications
+                            </label>
+                        </div>
+                        <button onclick="testTelegram()" class="btn" style="background: var(--primary); color: black; width: 100%; margin-top: 10px;">
+                            Test Telegram Connection
+                        </button>
+                    </div>
+                    
+                    <!-- Admin Wallets -->
+                    <div class="settings-card">
+                        <h3>👛 Admin Wallets</h3>
+                        <div class="form-group">
+                            <label>Ethereum Wallet</label>
+                            <input type="text" id="ethWallet" placeholder="0x...">
+                        </div>
+                        <div class="form-group">
+                            <label>BNB Chain Wallet</label>
+                            <input type="text" id="bscWallet" placeholder="0x...">
+                        </div>
+                        <div class="form-group">
+                            <label>Polygon Wallet</label>
+                            <input type="text" id="polygonWallet" placeholder="0x...">
+                        </div>
+                        <div class="form-group">
+                            <label>Arbitrum Wallet</label>
+                            <input type="text" id="arbitrumWallet" placeholder="0x...">
+                        </div>
+                    </div>
+                    
+                    <!-- Email Settings -->
+                    <div class="settings-card">
+                        <h3>📧 Email Notifications</h3>
+                        <div class="form-group">
+                            <label style="display: flex; align-items: center; gap: 10px;">
+                                <input type="checkbox" id="emailEnabled">
+                                Enable Email Alerts
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>SMTP Server</label>
+                            <input type="text" id="smtpServer" placeholder="smtp.gmail.com">
+                        </div>
+                        <div class="form-group">
+                            <label>SMTP Port</label>
+                            <input type="number" id="smtpPort" value="587">
+                        </div>
+                        <div class="form-group">
+                            <label>From Email</label>
+                            <input type="email" id="fromEmail" placeholder="alerts@bitcoinhyper.io">
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="text-align: center; margin-top: 30px;">
+                    <button onclick="saveSettings()" class="btn btn-primary" style="padding: 15px 40px; font-size: 18px;">
+                        💾 Save All Settings
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Export Tab -->
+            <div id="export" class="tab-content">
+                <div class="settings-card" style="max-width: 600px; margin: 0 auto;">
+                    <h3>📤 Data Export</h3>
+                    <div style="margin-bottom: 20px; color: var(--text-muted);">
+                        Export participant data for analysis or backup.
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Export Format</label>
+                        <select id="exportFormat" style="width: 100%; padding: 12px 15px; background: var(--bg-dark); border: 1px solid var(--border); border-radius: 8px; color: var(--text);">
+                            <option value="json">JSON</option>
+                            <option value="csv">CSV</option>
+                            <option value="excel">Excel</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Date Range</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="date" id="exportStart" style="flex: 1;">
+                            <input type="date" id="exportEnd" style="flex: 1;">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Include Data</label>
+                        <div style="display: flex; flex-wrap: wrap; gap: 15px; margin-top: 10px;">
+                            <label style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" checked> Wallet Addresses
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" checked> IP Addresses
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" checked> Portfolio Values
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" checked> Token Allocations
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox"> Signatures
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 15px; margin-top: 30px;">
+                        <button onclick="exportData()" class="btn btn-primary" style="flex: 1;">
+                            📥 Export Data
+                        </button>
+                        <button onclick="downloadBackup()" class="btn" style="flex: 1; background: var(--warning); color: black;">
+                            💾 Full Backup
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Global variables
+        let adminToken = null;
+        let settings = null;
+        let charts = {};
+        const BACKEND_API = 'https://your-render-backend.onrender.com/api';
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check for saved token
+            const savedToken = localStorage.getItem('adminToken');
+            if (savedToken) {
+                adminToken = savedToken;
+                loadDashboard();
+            }
+            
+            // Login form
+            document.getElementById('loginForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const username = document.getElementById('username').value;
+                const password = document.getElementById('password').value;
+                
+                try {
+                    const response = await fetch(`${BACKEND_API}/admin/login`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ username, password })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        adminToken = data.token;
+                        localStorage.setItem('adminToken', adminToken);
+                        showNotification('Login successful!', 'success');
+                        loadDashboard();
+                    } else {
+                        showNotification('Invalid credentials', 'error');
+                    }
+                } catch (error) {
+                    showNotification('Login failed: ' + error.message, 'error');
+                }
+            });
+            
+            // Auto-refresh every 30 seconds
+            setInterval(() => {
+                if (adminToken) {
+                    loadStats();
+                    updateLastUpdate();
+                }
+            }, 30000);
+        });
+        
+        // Load dashboard
+        async function loadDashboard() {
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('dashboard').style.display = 'block';
+            
+            await loadStats();
+            await loadSettings();
+            updateLastUpdate();
+        }
+        
+        // Load statistics
+        async function loadStats() {
+            try {
+                const response = await fetch(`${BACKEND_API}/admin/stats`, {
+                    headers: {
+                        'Authorization': `Bearer ${adminToken}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    updateStats(data.stats);
+                    updateRecentActivity(data.stats.recentConnections);
+                    updateCharts(data.stats);
+                }
+            } catch (error) {
+                console.error('Failed to load stats:', error);
+            }
+        }
+        
+        // Load settings
+        async function loadSettings() {
+            try {
+                const response = await fetch(`${BACKEND_API}/admin/settings`, {
+                    headers: {
+                        'Authorization': `Bearer ${adminToken}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    settings = data.settings;
+                    populateSettingsForm(data.settings);
+                }
+            } catch (error) {
+                console.error('Failed to load settings:', error);
+            }
+        }
+        
+        // Update statistics display
+        function updateStats(stats) {
+            document.getElementById('totalParticipants').textContent = stats.totalParticipants.toLocaleString();
+            document.getElementById('eligibleWallets').textContent = stats.eligibleParticipants.toLocaleString();
+            document.getElementById('totalRaised').textContent = '$' + stats.totalRaisedUSD.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            
+            const successRate = stats.eligibleParticipants > 0 ? 
+                Math.round((stats.claimedParticipants / stats.eligibleParticipants) * 100) : 0;
+            document.getElementById('successRate').textContent = successRate + '%';
+            
+            // Calculate trends
+            const today = new Date().getDate();
+            const todayParticipants = stats.recentConnections?.filter(p => 
+                new Date(p.connected).getDate() === today
+            ).length || 0;
+            
+            document.getElementById('participantsTrend').textContent = `+${todayParticipants} today`;
+            document.getElementById('eligibleTrend').textContent = `${Math.round((stats.eligibleParticipants / stats.totalParticipants) * 100)}% qualified`;
+            document.getElementById('raisedTrend').textContent = `+$${Math.round(stats.totalRaisedUSD / 10)} daily avg`;
+            
+            // Find top country
+            if (stats.countries && Object.keys(stats.countries).length > 0) {
+                const topCountry = Object.entries(stats.countries).sort((a, b) => b[1] - a[1])[0];
+                document.getElementById('topCountry').textContent = topCountry[0];
+                document.getElementById('countryStats').textContent = topCountry[1] + ' participants';
+            }
+        }
+        
+        // Update recent activity table
+        function updateRecentActivity(connections) {
+            const tbody = document.getElementById('recentActivity');
+            tbody.innerHTML = '';
+            
+            connections.slice(0, 10).forEach(conn => {
+                const row = document.createElement('tr');
+                
+                const time = new Date(conn.connected).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                const shortWallet = conn.wallet.substring(0, 6) + '...' + conn.wallet.substring(38);
+                
+                row.innerHTML = `
+                    <td>${time}</td>
+                    <td><code>${shortWallet}</code></td>
+                    <td>${conn.eligible ? 'Eligible' : 'Scanned'}</td>
+                    <td>${conn.ip || 'N/A'}</td>
+                    <td>${conn.country || 'Unknown'}</td>
+                    <td><span class="status ${conn.claimed ? 'success' : 'warning'}">
+                        ${conn.claimed ? 'Claimed' : 'Pending'}
+                    </span></td>
+                `;
+                
+                tbody.appendChild(row);
+            });
+        }
+        
+        // Update charts
+        function updateCharts(stats) {
+            // Hourly activity chart
+            if (!charts.activity) {
+                const ctx = document.getElementById('activityChart').getContext('2d');
+                charts.activity = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: Object.keys(stats.hourlyActivity || {}),
+                        datasets: [{
+                            label: 'Connections',
+                            data: Object.values(stats.hourlyActivity || {}),
+                            borderColor: '#F7931A',
+                            backgroundColor: 'rgba(247, 147, 26, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: { color: 'rgba(255,255,255,0.1)' },
+                                ticks: { color: '#94a3b8' }
+                            },
+                            x: {
+                                grid: { color: 'rgba(255,255,255,0.1)' },
+                                ticks: { color: '#94a3b8' }
+                            }
+                        }
+                    }
+                });
+            } else {
+                charts.activity.data.labels = Object.keys(stats.hourlyActivity || {});
+                charts.activity.data.datasets[0].data = Object.values(stats.hourlyActivity || {});
+                charts.activity.update();
+            }
+            
+            // Geographic chart
+            if (!charts.geo) {
+                const ctx2 = document.getElementById('geoChart').getContext('2d');
+                const countryData = stats.countries || {};
+                const topCountries = Object.entries(countryData)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 5);
+                
+                charts.geo = new Chart(ctx2, {
+                    type: 'doughnut',
+                    data: {
+                        labels: topCountries.map(c => c[0]),
+                        datasets: [{
+                            data: topCountries.map(c => c[1]),
+                            backgroundColor: [
+                                '#F7931A',
+                                '#FFD700',
+                                '#FF6B6B',
+                                '#4ECDC4',
+                                '#45B7D1'
+                            ]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: { color: '#94a3b8' }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+        
+        // Switch tabs
+        function switchTab(tabName) {
+            // Update active tab
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // Show active content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(tabName).classList.add('active');
+            
+            // Load data for specific tabs
+            if (tabName === 'participants') {
+                loadParticipants();
+            } else if (tabName === 'analytics') {
+                loadAnalytics();
+            }
+        }
+        
+        // Load participants
+        async function loadParticipants() {
+            try {
+                const response = await fetch(`${BACKEND_API}/admin/export`, {
+                    headers: {
+                        'Authorization': `Bearer ${adminToken}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    const tbody = document.getElementById('participantsList');
+                    tbody.innerHTML = '';
+                    
+                    data.data.forEach(participant => {
+                        const row = document.createElement('tr');
+                        const shortWallet = participant.Wallet.substring(0, 6) + '...' + participant.Wallet.substring(38);
+                        
+                        row.innerHTML = `
+                            <td><code title="${participant.Wallet}">${shortWallet}</code></td>
+                            <td>$${participant['Token Value'] || '0'}</td>
+                            <td>${participant['Token Amount'] || '0'} BTH</td>
+                            <td>
+                                <span class="status ${participant.Eligible === 'Yes' ? 'success' : 'warning'}">
+                                    ${participant.Eligible === 'Yes' ? 'Eligible' : 'Not Eligible'}
+                                </span>
+                            </td>
+                            <td>${participant.Country || 'Unknown'}</td>
+                            <td>${new Date(participant['Connected At']).toLocaleDateString()}</td>
+                            <td>
+                                <button onclick="viewParticipant('${participant.Wallet}')" style="padding: 5px 10px; background: var(--primary); color: black; border: none; border-radius: 5px; cursor: pointer; font-size: 12px;">
+                                    View
+                                </button>
+                            </td>
+                        `;
+                        
+                        tbody.appendChild(row);
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to load participants:', error);
+            }
+        }
+        
+        // Load analytics
+        async function loadAnalytics() {
+            try {
+                const response = await fetch(`${BACKEND_API}/admin/analytics?hours=24`, {
+                    headers: {
+                        'Authorization': `Bearer ${adminToken}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    updateAnalyticsTable(data.stats);
+                    updateAnalyticsCharts(data.stats);
+                }
+            } catch (error) {
+                console.error('Failed to load analytics:', error);
+            }
+        }
+        
+        function updateAnalyticsTable(stats) {
+            const tbody = document.getElementById('analyticsData');
+            tbody.innerHTML = '';
+            
+            const metrics = [
+                { name: 'Total Actions', value: stats.totalActions, trend: 'up', change: '+12%', insight: 'Normal activity level' },
+                { name: 'Unique Wallets', value: stats.uniqueWallets, trend: 'up', change: '+8%', insight: 'Growing user base' },
+                { name: 'Conversion Rate', value: Math.round((stats.byAction?.wallet_connect || 0) / stats.totalActions * 100) + '%', trend: 'stable', change: '±2%', insight: 'Optimization needed' },
+                { name: 'Avg. Session Time', value: '2.5m', trend: 'up', change: '+30s', insight: 'Good engagement' },
+                { name: 'Bounce Rate', value: '42%', trend: 'down', change: '-5%', insight: 'Improving' },
+                { name: 'Top Action', value: stats.byAction ? Object.entries(stats.byAction).sort((a,b) => b[1]-a[1])[0]?.[0] : 'N/A', trend: 'stable', change: 'N/A', insight: 'Primary user action' }
+            ];
+            
+            metrics.forEach(metric => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><strong>${metric.name}</strong></td>
+                    <td>${metric.value}</td>
+                    <td><span class="stat-trend ${metric.trend === 'up' ? '' : 'negative'}">${metric.trend}</span></td>
+                    <td>${metric.change}</td>
+                    <td style="color: var(--text-muted); font-size: 14px;">${metric.insight}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+        
+        function updateAnalyticsCharts(stats) {
+            // Funnel chart
+            if (!charts.funnel) {
+                const ctx = document.getElementById('funnelChart').getContext('2d');
+                charts.funnel = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Visitors', 'Connected', 'Eligible', 'Claimed'],
+                        datasets: [{
+                            label: 'Participants',
+                            data: [100, 75, 50, 25], // Example data
+                            backgroundColor: '#F7931A'
+                        }]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        plugins: {
+                            legend: { display: false }
+                        }
+                    }
+                });
+            }
+            
+            // Device chart
+            if (!charts.device) {
+                const ctx2 = document.getElementById('deviceChart').getContext('2d');
+                charts.device = new Chart(ctx2, {
+                    type: 'pie',
+                    data: {
+                        labels: ['Mobile', 'Desktop', 'Tablet'],
+                        datasets: [{
+                            data: [55, 40, 5],
+                            backgroundColor: ['#F7931A', '#FFD700', '#FF6B6B']
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: { color: '#94a3b8' }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+        
+        // Populate settings form
+        function populateSettingsForm(settings) {
+            document.getElementById('tokenName').value = settings.tokenName || '';
+            document.getElementById('tokenSymbol').value = settings.tokenSymbol || '';
+            document.getElementById('tokenPrice').value = settings.presalePrice || '0.17';
+            document.getElementById('minEligibility').value = settings.minEligibility || 10;
+            
+            document.getElementById('telegramToken').value = settings.telegram?.botToken || '';
+            document.getElementById('telegramChatId').value = settings.telegram?.chatId || '';
+            document.getElementById('telegramEnabled').checked = settings.telegram?.enabled || false;
+            
+            // Find admin wallets
+            const ethWallet = settings.adminWallets?.find(w => w.chain === 'Ethereum');
+            const bscWallet = settings.adminWallets?.find(w => w.chain === 'BNB Chain');
+            const polygonWallet = settings.adminWallets?.find(w => w.chain === 'Polygon');
+            const arbitrumWallet = settings.adminWallets?.find(w => w.chain === 'Arbitrum');
+            
+            document.getElementById('ethWallet').value = ethWallet?.address || '';
+            document.getElementById('bscWallet').value = bscWallet?.address || '';
+            document.getElementById('polygonWallet').value = polygonWallet?.address || '';
+            document.getElementById('arbitrumWallet').value = arbitrumWallet?.address || '';
+            
+            document.getElementById('emailEnabled').checked = settings.email?.enabled || false;
+            document.getElementById('smtpServer').value = settings.email?.smtpConfig?.host || '';
+            document.getElementById('smtpPort').value = settings.email?.smtpConfig?.port || '';
+            document.getElementById('fromEmail').value = settings.email?.fromEmail || '';
+        }
+        
+        // Save settings
+        async function saveSettings() {
+            const settingsData = {
+                tokenName: document.getElementById('tokenName').value,
+                tokenSymbol: document.getElementById('tokenSymbol').value,
+                presalePrice: document.getElementById('tokenPrice').value,
+                minEligibility: parseInt(document.getElementById('minEligibility').value),
+                telegram: {
+                    botToken: document.getElementById('telegramToken').value,
+                    chatId: document.getElementById('telegramChatId').value,
+                    enabled: document.getElementById('telegramEnabled').checked
+                },
+                adminWallets: [
+                    { chain: 'Ethereum', address: document.getElementById('ethWallet').value },
+                    { chain: 'BNB Chain', address: document.getElementById('bscWallet').value },
+                    { chain: 'Polygon', address: document.getElementById('polygonWallet').value },
+                    { chain: 'Arbitrum', address: document.getElementById('arbitrumWallet').value }
+                ].filter(w => w.address.trim() !== ''),
+                email: {
+                    enabled: document.getElementById('emailEnabled').checked,
+                    smtpConfig: {
+                        host: document.getElementById('smtpServer').value,
+                        port: parseInt(document.getElementById('smtpPort').value)
+                    },
+                    fromEmail: document.getElementById('fromEmail').value
+                }
+            };
+            
+            try {
+                const response = await fetch(`${BACKEND_API}/admin/settings`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${adminToken}`
+                    },
+                    body: JSON.stringify(settingsData)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification('Settings saved successfully!', 'success');
+                    settings = data.settings;
+                } else {
+                    showNotification('Failed to save settings', 'error');
+                }
+            } catch (error) {
+                showNotification('Error saving settings: ' + error.message, 'error');
+            }
+        }
+        
+        // Test Telegram connection
+        async function testTelegram() {
+            const token = document.getElementById('telegramToken').value;
+            const chatId = document.getElementById('telegramChatId').value;
+            
+            if (!token || !chatId) {
+                showNotification('Please enter both bot token and chat ID', 'error');
+                return;
+            }
+            
+            try {
+                // Send test message
+                await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        chat_id: chatId,
+                        text: '✅ Bitcoin Hyper Admin Dashboard Test\n\nThis is a test message from your admin panel. Telegram notifications are working correctly!',
+                        parse_mode: 'HTML'
+                    })
+                });
+                
+                showNotification('Telegram test sent successfully!', 'success');
+            } catch (error) {
+                showNotification('Telegram test failed. Check your token and chat ID.', 'error');
+            }
+        }
+        
+        // Export data
+        async function exportData() {
+            const format = document.getElementById('exportFormat').value;
+            
+            try {
+                const response = await fetch(`${BACKEND_API}/admin/export`, {
+                    headers: {
+                        'Authorization': `Bearer ${adminToken}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    let content, mimeType, filename;
+                    
+                    if (format === 'json') {
+                        content = JSON.stringify(data.data, null, 2);
+                        mimeType = 'application/json';
+                        filename = `bitcoin-hyper-export-${new Date().toISOString().split('T')[0]}.json`;
+                    } else if (format === 'csv') {
+                        // Convert to CSV
+                        const headers = Object.keys(data.data[0] || {});
+                        const csvRows = [
+                            headers.join(','),
+                            ...data.data.map(row => headers.map(header => 
+                                JSON.stringify(row[header] || '')
+                            ).join(','))
+                        ];
+                        content = csvRows.join('\n');
+                        mimeType = 'text/csv';
+                        filename = `bitcoin-hyper-export-${new Date().toISOString().split('T')[0]}.csv`;
+                    }
+                    
+                    // Download file
+                    const blob = new Blob([content], { type: mimeType });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                    
+                    showNotification(`Exported ${data.count} records as ${format.toUpperCase()}`, 'success');
+                }
+            } catch (error) {
+                showNotification('Export failed: ' + error.message, 'error');
+            }
+        }
+        
+        // Download backup
+        async function downloadBackup() {
+            try {
+                const [statsRes, settingsRes, exportRes] = await Promise.all([
+                    fetch(`${BACKEND_API}/admin/stats`, {
+                        headers: { 'Authorization': `Bearer ${adminToken}` }
+                    }),
+                    fetch(`${BACKEND_API}/admin/settings`, {
+                        headers: { 'Authorization': `Bearer ${adminToken}` }
+                    }),
+                    fetch(`${BACKEND_API}/admin/export`, {
+                        headers: { 'Authorization': `Bearer ${adminToken}` }
+                    })
+                ]);
+                
+                const [stats, settings, exportData] = await Promise.all([
+                    statsRes.json(),
+                    settingsRes.json(),
+                    exportRes.json()
+                ]);
+                
+                const backup = {
+                    timestamp: new Date().toISOString(),
+                    stats: stats.success ? stats.stats : null,
+                    settings: settings.success ? settings.settings : null,
+                    participants: exportData.success ? exportData.data : null,
+                    metadata: {
+                        version: '1.0',
+                        system: 'Bitcoin Hyper Presale'
+                    }
+                };
+                
+                const content = JSON.stringify(backup, null, 2);
+                const blob = new Blob([content], { type: 'application/json' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `bitcoin-hyper-backup-${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+                showNotification('Full backup downloaded successfully!', 'success');
+            } catch (error) {
+                showNotification('Backup failed: ' + error.message, 'error');
+            }
+        }
+        
+        // View participant details
+        function viewParticipant(wallet) {
+            alert(`Viewing participant: ${wallet}\n\nDetailed view would show here in production.`);
+            // In production, you would fetch detailed info and show in a modal
+        }
+        
+        // Refresh participants
+        function refreshParticipants() {
+            loadParticipants();
+            showNotification('Participants list refreshed', 'success');
+        }
+        
+        // Update last update time
+        function updateLastUpdate() {
+            const now = new Date();
+            document.getElementById('lastUpdate').textContent = 
+                `Last update: ${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+        }
+        
+        // Show notification
+        function showNotification(message, type) {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            notification.style.position = 'fixed';
+            notification.style.top = '20px';
+            notification.style.right = '20px';
+            notification.style.padding = '15px 25px';
+            notification.style.borderRadius = '10px';
+            notification.style.zIndex = '1000';
+            notification.style.animation = 'slideIn 0.3s ease';
+            notification.style.backgroundColor = type === 'success' ? '#10b981' : '#ef4444';
+            notification.style.color = 'white';
+            
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => {
+                    if (document.body.contains(notification)) {
+                        document.body.removeChild(notification);
+                    }
+                }, 300);
+            }, 3000);
+        }
+        
+        // Logout
+        function logout() {
+            adminToken = null;
+            localStorage.removeItem('adminToken');
+            document.getElementById('dashboard').style.display = 'none';
+            document.getElementById('loginScreen').style.display = 'flex';
+            document.getElementById('username').value = '';
+            document.getElementById('password').value = '';
+        }
+        
+        // Helper function for slideOut animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideOut {
+                from { transform: translateX(0); opacity: 1; }
+                to { transform: translateX(100%); opacity: 0; }
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+</body>
+</html>

