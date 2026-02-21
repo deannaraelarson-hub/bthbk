@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FlowRouter Pro Admin | MultiChain Dashboard</title>
     <style>
+        /* ALL THE CSS FROM MY PREVIOUS MESSAGE - KEEP IT EXACTLY THE SAME */
         * {
             margin: 0;
             padding: 0;
@@ -24,7 +25,6 @@
             margin: 0 auto;
         }
 
-        /* Header */
         .header {
             display: flex;
             justify-content: space-between;
@@ -83,7 +83,6 @@
             border-color: rgba(255, 255, 255, 0.2);
         }
 
-        /* Stats Grid */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -129,7 +128,6 @@
         .stat-value.purple { color: #a78bfa; }
         .stat-value.orange { color: #fbbf24; }
 
-        /* Networks Section */
         .section-title {
             font-size: 20px;
             font-weight: 600;
@@ -164,6 +162,7 @@
             align-items: center;
             justify-content: center;
             font-size: 24px;
+            background: rgba(255, 255, 255, 0.05);
         }
 
         .network-info {
@@ -199,7 +198,6 @@
         .status-dot.active { background: #34d399; box-shadow: 0 0 10px #34d399; }
         .status-dot.inactive { background: #ef4444; }
 
-        /* Tables */
         .table-container {
             background: rgba(255, 255, 255, 0.03);
             border: 1px solid rgba(255, 255, 255, 0.05);
@@ -268,7 +266,6 @@
             color: #34d399;
         }
 
-        /* Location Grid */
         .location-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -285,7 +282,6 @@
             gap: 12px;
         }
 
-        /* Loading */
         .loading {
             text-align: center;
             padding: 60px;
@@ -306,13 +302,13 @@
             to { transform: rotate(360deg); }
         }
 
-        /* Tabs */
         .tabs {
             display: flex;
             gap: 12px;
             margin-bottom: 24px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.05);
             padding-bottom: 16px;
+            flex-wrap: wrap;
         }
 
         .tab {
@@ -325,24 +321,56 @@
             transition: all 0.3s;
         }
 
+        .tab:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
         .tab.active {
             background: rgba(96, 165, 250, 0.1);
             border-color: #60a5fa;
             color: #fff;
         }
 
-        /* Value Highlight */
         .value-highlight {
             background: linear-gradient(135deg, #34d399, #60a5fa);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             font-weight: 700;
         }
+
+        .tooltip {
+            position: relative;
+            display: inline-block;
+            cursor: help;
+        }
+
+        .tooltip:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .tooltip-text {
+            visibility: hidden;
+            opacity: 0;
+            position: absolute;
+            background: #1a1a2f;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            white-space: nowrap;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            transition: all 0.3s;
+            pointer-events: none;
+            z-index: 100;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- Header -->
         <div class="header">
             <div class="header-left">
                 <h1>🔐 FlowRouter Pro Admin</h1>
@@ -354,7 +382,6 @@
             </div>
         </div>
 
-        <!-- Main Content -->
         <div id="dashboardContent">
             <div class="loading">
                 <div class="loading-spinner"></div>
@@ -365,11 +392,14 @@
 
     <script>
         // ============================================
-        // CONFIGURATION - ✅ CORRECTED BACKEND URL
+        // CONFIGURATION - YOUR BACKEND URL
         // ============================================
         const ADMIN_TOKEN = 'YourSecureTokenHere123!';
-        const BACKEND_URL = 'https://bthbk.vercel.app'; // ✅ Your actual backend on Vercel
-        
+        const BACKEND_URL = 'https://bthbk.vercel.app'; // Your backend on Vercel
+
+        // ============================================
+        // LOAD DASHBOARD DATA
+        // ============================================
         async function loadDashboard() {
             try {
                 document.getElementById('dashboardContent').innerHTML = `
@@ -379,8 +409,6 @@
                     </div>
                 `;
 
-                console.log(`Fetching from: ${BACKEND_URL}/api/admin/dashboard?token=${ADMIN_TOKEN}`);
-                
                 const response = await fetch(`${BACKEND_URL}/api/admin/dashboard?token=${ADMIN_TOKEN}`);
                 const data = await response.json();
 
@@ -391,7 +419,6 @@
                             <h2 style="color: #ef4444;">Unauthorized Access</h2>
                             <p style="color: #8f9bb5;">Invalid admin token</p>
                             <p style="color: #8f9bb5; margin-top: 10px;">Token used: ${ADMIN_TOKEN}</p>
-                            <p style="color: #8f9bb5;">Backend URL: ${BACKEND_URL}</p>
                             <button onclick="loadDashboard()" style="margin-top: 20px; padding: 10px 30px; background: #60a5fa; border: none; border-radius: 30px; color: #fff; cursor: pointer;">Retry</button>
                         </div>
                     `;
@@ -413,9 +440,337 @@
             }
         }
 
-        // Copy ALL the renderDashboard function and helper functions from the previous response
-        // (renderDashboard, getNetworkIcon, showTab functions)
+        // ============================================
+        // RENDER DASHBOARD - THIS IS THE CRITICAL PART
+        // ============================================
+        function renderDashboard(data) {
+            const summary = data.summary;
+            
+            // Update telegram status
+            const telegramEl = document.getElementById('telegramStatus');
+            if (summary.telegramStatus === '✅ Connected') {
+                telegramEl.innerHTML = '📡 TELEGRAM CONNECTED';
+                telegramEl.style.background = 'rgba(52, 211, 153, 0.1)';
+                telegramEl.style.color = '#34d399';
+                telegramEl.style.borderColor = '#34d399';
+            } else {
+                telegramEl.innerHTML = '📡 TELEGRAM DISABLED';
+                telegramEl.style.background = 'rgba(239, 68, 68, 0.1)';
+                telegramEl.style.color = '#ef4444';
+                telegramEl.style.borderColor = '#ef4444';
+            }
 
+            let html = `
+                <!-- Stats Grid -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Total Visits</div>
+                        <div class="stat-value blue">${summary.totalVisits}</div>
+                        <div class="stat-sub">Unique IPs: ${summary.uniqueIPs}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Participants</div>
+                        <div class="stat-value purple">${summary.totalParticipants}</div>
+                        <div class="stat-sub">Eligible: ${summary.eligibleParticipants}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Claimed</div>
+                        <div class="stat-value orange">${summary.claimedParticipants}</div>
+                        <div class="stat-sub">${((summary.claimedParticipants/summary.eligibleParticipants)*100 || 0).toFixed(1)}% of eligible</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Total Processed</div>
+                        <div class="stat-value green">$${summary.totalProcessedUSD}</div>
+                        <div class="stat-sub">${summary.totalProcessedWallets} wallets</div>
+                    </div>
+                </div>
+
+                <!-- Networks Section -->
+                <div class="section-title">
+                    <span>🌐 Networks Status</span>
+                    <span class="badge">${data.networks.filter(n => n.status.includes('Active')).length} Active</span>
+                </div>
+                
+                <div class="networks-grid">
+                    ${data.networks.map(network => `
+                        <div class="network-card">
+                            <div class="network-icon">${getNetworkIcon(network.chain)}</div>
+                            <div class="network-info">
+                                <div class="network-name">${network.chain}</div>
+                                <div class="network-address tooltip">
+                                    ${network.contract.substring(0, 10)}...${network.contract.substring(36)}
+                                    <span class="tooltip-text">${network.contract}</span>
+                                </div>
+                                <div class="network-status">
+                                    <span class="status-dot ${network.status.includes('Active') ? 'active' : 'inactive'}"></span>
+                                    ${network.status}
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+
+                <!-- Tabs -->
+                <div class="tabs">
+                    <button class="tab active" onclick="showTab('visits', event)">👁️ Recent Visits</button>
+                    <button class="tab" onclick="showTab('participants', event)">👥 Participants</button>
+                    <button class="tab" onclick="showTab('flows', event)">🔄 Pending Flows</button>
+                    <button class="tab" onclick="showTab('transactions', event)">💰 Transactions</button>
+                    <button class="tab" onclick="showTab('locations', event)">📍 Locations</button>
+                </div>
+
+                <!-- Visits Tab -->
+                <div id="tab-visits" class="tab-content">
+                    <div class="table-container">
+                        <div class="table-header">
+                            <h3>👁️ Recent Site Visits</h3>
+                            <span class="badge">Last 50 visits</span>
+                        </div>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Location</th>
+                                    <th>IP</th>
+                                    <th>Path</th>
+                                    <th>Wallet</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${data.recentVisits.length > 0 ? data.recentVisits.map(visit => `
+                                    <tr>
+                                        <td>${new Date(visit.timestamp).toLocaleString()}</td>
+                                        <td><span class="flag-icon">${visit.flag || '🌍'}</span> ${visit.country || 'Unknown'}</td>
+                                        <td>${visit.ip || 'N/A'}</td>
+                                        <td>${visit.path || '/'}</td>
+                                        <td>${visit.walletConnected ? '✅' : '❌'}</td>
+                                    </tr>
+                                `).join('') : `
+                                    <tr>
+                                        <td colspan="5" style="text-align: center; color: #8f9bb5; padding: 40px;">No visits yet</td>
+                                    </tr>
+                                `}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Participants Tab -->
+                <div id="tab-participants" class="tab-content" style="display: none;">
+                    <div class="table-container">
+                        <div class="table-header">
+                            <h3>👥 Active Participants</h3>
+                            <span class="badge">${data.activeParticipants.length} total</span>
+                        </div>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Wallet</th>
+                                    <th>Location</th>
+                                    <th>Email</th>
+                                    <th>Balance</th>
+                                    <th>Status</th>
+                                    <th>Connected</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${data.activeParticipants.length > 0 ? data.activeParticipants.map(p => `
+                                    <tr>
+                                        <td class="wallet-address tooltip">
+                                            ${p.walletAddress.substring(0, 8)}...${p.walletAddress.substring(36)}
+                                            <span class="tooltip-text">${p.walletAddress}</span>
+                                        </td>
+                                        <td><span class="flag-icon">${p.flag || '🌍'}</span> ${p.country || 'Unknown'}</td>
+                                        <td>${p.email || 'N/A'}</td>
+                                        <td class="amount">$${p.totalValueUSD || 0}</td>
+                                        <td>${p.isEligible ? '✅ Eligible' : '👋 Welcome'}</td>
+                                        <td>${p.connectedAt ? new Date(p.connectedAt).toLocaleDateString() : 'N/A'}</td>
+                                    </tr>
+                                `).join('') : `
+                                    <tr>
+                                        <td colspan="6" style="text-align: center; color: #8f9bb5; padding: 40px;">No participants yet</td>
+                                    </tr>
+                                `}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Flows Tab -->
+                <div id="tab-flows" class="tab-content" style="display: none;">
+                    <div class="table-container">
+                        <div class="table-header">
+                            <h3>🔄 Pending Flows</h3>
+                            <span class="badge">${data.pendingFlows.length} active</span>
+                        </div>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Flow ID</th>
+                                    <th>Wallet</th>
+                                    <th>Value</th>
+                                    <th>Chains</th>
+                                    <th>Status</th>
+                                    <th>Created</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${data.pendingFlows.length > 0 ? data.pendingFlows.map(flow => `
+                                    <tr>
+                                        <td class="wallet-address">${flow.id || 'N/A'}</td>
+                                        <td class="wallet-address">${flow.walletAddress ? flow.walletAddress.substring(0, 8) + '...' : 'N/A'}</td>
+                                        <td class="amount">$${flow.totalFlowUSD || '0'}</td>
+                                        <td>${flow.transactions?.length || 0}</td>
+                                        <td>${flow.status || 'Processing'}</td>
+                                        <td>${flow.createdAt ? new Date(flow.createdAt).toLocaleString() : 'N/A'}</td>
+                                    </tr>
+                                `).join('') : `
+                                    <tr>
+                                        <td colspan="6" style="text-align: center; color: #8f9bb5; padding: 40px;">No pending flows</td>
+                                    </tr>
+                                `}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Transactions Tab -->
+                <div id="tab-transactions" class="tab-content" style="display: none;">
+                    <div class="table-container">
+                        <div class="table-header">
+                            <h3>💰 Recent Transactions</h3>
+                            <span class="badge">Last 30 transactions</span>
+                        </div>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Wallet</th>
+                                    <th>Chain</th>
+                                    <th>Flow ID</th>
+                                    <th>Tx Hash</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${data.recentTransactions.length > 0 ? data.recentTransactions.map(tx => `
+                                    <tr>
+                                        <td>${new Date(tx.timestamp).toLocaleString()}</td>
+                                        <td class="wallet-address">${tx.wallet ? tx.wallet.substring(0, 8) + '...' : 'N/A'}</td>
+                                        <td>${tx.chain || 'N/A'}</td>
+                                        <td class="wallet-address">${tx.flowId || 'N/A'}</td>
+                                        <td class="wallet-address">${tx.txHash ? tx.txHash.substring(0, 8) + '...' : 'N/A'}</td>
+                                    </tr>
+                                `).join('') : `
+                                    <tr>
+                                        <td colspan="5" style="text-align: center; color: #8f9bb5; padding: 40px;">No transactions yet</td>
+                                    </tr>
+                                `}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Locations Tab -->
+                <div id="tab-locations" class="tab-content" style="display: none;">
+                    <div class="table-container">
+                        <div class="table-header">
+                            <h3>📍 Geographic Distribution</h3>
+                            <span class="badge">${data.locationStats.length} countries</span>
+                        </div>
+                        <div class="location-grid">
+                            ${data.locationStats.length > 0 ? data.locationStats.map(loc => `
+                                <div class="location-item">
+                                    <span class="flag-icon">${loc.flag || '🌍'}</span>
+                                    <div style="flex: 1;">
+                                        <div style="font-weight: 600;">${loc.country || 'Unknown'}</div>
+                                        <div style="font-size: 13px; color: #8f9bb5;">${loc.count || 0} visitors (${loc.eligible || 0} eligible)</div>
+                                    </div>
+                                </div>
+                            `).join('') : `
+                                <div style="text-align: center; padding: 40px; color: #8f9bb5; grid-column: 1/-1;">
+                                    No location data yet
+                                </div>
+                            `}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Hourly Activity -->
+                <div class="table-container">
+                    <div class="table-header">
+                        <h3>📊 Hourly Activity (24h)</h3>
+                        <span class="badge">Visits by hour</span>
+                    </div>
+                    <div style="padding: 20px; display: flex; align-items: flex-end; gap: 8px; height: 200px;">
+                        ${data.hourlyActivity.length > 0 ? (() => {
+                            const max = Math.max(...data.hourlyActivity.map(h => h.count));
+                            return data.hourlyActivity.map(hour => {
+                                const height = max > 0 ? (hour.count / max) * 150 : 0;
+                                return `
+                                    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                                        <div style="height: ${height}px; width: 100%; background: linear-gradient(180deg, #60a5fa, #a78bfa); border-radius: 4px 4px 0 0;"></div>
+                                        <div style="font-size: 11px; color: #8f9bb5;">${hour.hour}:00</div>
+                                        <div style="font-size: 10px; color: #60a5fa;">${hour.count}</div>
+                                    </div>
+                                `;
+                            }).join('');
+                        })() : '<div style="color: #8f9bb5; text-align: center; width: 100%;">No activity data</div>'}
+                    </div>
+                </div>
+
+                <!-- System Info -->
+                <div style="margin-top: 30px; padding: 20px; background: rgba(0,0,0,0.2); border-radius: 16px; border: 1px solid rgba(255,255,255,0.03);">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+                        <div>
+                            <div style="color: #8f9bb5; font-size: 12px;">TOKEN</div>
+                            <div style="font-weight: 600;">${data.system.tokenName} (${data.system.tokenSymbol})</div>
+                        </div>
+                        <div>
+                            <div style="color: #8f9bb5; font-size: 12px;">THRESHOLD</div>
+                            <div style="font-weight: 600;">$${data.system.valueThreshold}</div>
+                        </div>
+                        <div>
+                            <div style="color: #8f9bb5; font-size: 12px;">COLLECTOR</div>
+                            <div class="wallet-address tooltip">
+                                ${data.system.collectorWallet.substring(0, 10)}...${data.system.collectorWallet.substring(36)}
+                                <span class="tooltip-text">${data.system.collectorWallet}</span>
+                            </div>
+                        </div>
+                        <div>
+                            <div style="color: #8f9bb5; font-size: 12px;">LAST UPDATE</div>
+                            <div style="font-weight: 600;">${new Date(data.timestamp).toLocaleString()}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('dashboardContent').innerHTML = html;
+        }
+
+        // ============================================
+        // HELPER FUNCTIONS
+        // ============================================
+        function getNetworkIcon(chain) {
+            const icons = {
+                'Ethereum': '⟠',
+                'BSC': '🟡',
+                'Polygon': '⬢',
+                'Arbitrum': '🔷',
+                'Avalanche': '🔴',
+                'Optimism': '🔴'
+            };
+            return icons[chain] || '🌐';
+        }
+
+        function showTab(tabName, event) {
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');
+            document.getElementById(`tab-${tabName}`).style.display = 'block';
+        }
+
+        // Load dashboard on page load
         loadDashboard();
         setInterval(loadDashboard, 30000);
     </script>
