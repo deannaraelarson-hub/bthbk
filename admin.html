@@ -34,25 +34,20 @@
             border-radius: 24px;
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.05);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
         }
 
         .header-left h1 {
             font-size: 28px;
             font-weight: 600;
-            background: linear-gradient(135deg, #fff, #a5b4fc, #60a5fa);
+            background: linear-gradient(135deg, #fff, #a5b4fc);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             margin-bottom: 4px;
-            letter-spacing: -0.5px;
         }
 
         .header-left .subtitle {
             color: #8f9bb5;
             font-size: 14px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
         }
 
         .header-right {
@@ -63,44 +58,33 @@
 
         .status-badge {
             padding: 8px 16px;
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid #ef4444;
+            background: rgba(52, 211, 153, 0.1);
+            border: 1px solid #34d399;
             border-radius: 30px;
-            color: #ef4444;
+            color: #34d399;
             font-size: 14px;
             font-weight: 500;
-            transition: all 0.3s;
-        }
-
-        .status-badge.connected {
-            background: rgba(52, 211, 153, 0.1);
-            border-color: #34d399;
-            color: #34d399;
         }
 
         .refresh-btn {
-            padding: 10px 24px;
+            padding: 10px 20px;
             background: rgba(255, 255, 255, 0.05);
             border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 30px;
+            border-radius: 12px;
             color: #fff;
             cursor: pointer;
             transition: all 0.3s;
             font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 8px;
         }
 
         .refresh-btn:hover {
             background: rgba(255, 255, 255, 0.1);
             border-color: rgba(255, 255, 255, 0.2);
-            transform: translateY(-2px);
         }
 
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
             gap: 20px;
             margin-bottom: 30px;
         }
@@ -108,23 +92,9 @@
         .stat-card {
             background: rgba(255, 255, 255, 0.03);
             border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 24px;
+            border-radius: 20px;
             padding: 24px;
-            transition: all 0.3s;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .stat-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 2px;
-            background: linear-gradient(90deg, #60a5fa, #a78bfa, #34d399);
-            opacity: 0;
-            transition: opacity 0.3s;
+            transition: transform 0.3s;
         }
 
         .stat-card:hover {
@@ -133,54 +103,37 @@
             border-color: rgba(255, 255, 255, 0.1);
         }
 
-        .stat-card:hover::before {
-            opacity: 1;
-        }
-
         .stat-label {
             color: #8f9bb5;
             font-size: 14px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            margin-bottom: 12px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
+            margin-bottom: 8px;
         }
 
         .stat-value {
-            font-size: 42px;
-            font-weight: 700;
-            margin-bottom: 8px;
-            line-height: 1;
+            font-size: 36px;
+            font-weight: 600;
+            margin-bottom: 4px;
         }
 
         .stat-sub {
             color: #5a6a8a;
             font-size: 13px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
         }
 
-        .stat-value.blue { color: #60a5fa; text-shadow: 0 0 20px rgba(96, 165, 250, 0.3); }
-        .stat-value.purple { color: #a78bfa; text-shadow: 0 0 20px rgba(167, 139, 250, 0.3); }
-        .stat-value.orange { color: #fbbf24; text-shadow: 0 0 20px rgba(251, 191, 36, 0.3); }
-        .stat-value.green { color: #34d399; text-shadow: 0 0 20px rgba(52, 211, 153, 0.3); }
+        .stat-value.green { color: #34d399; }
+        .stat-value.blue { color: #60a5fa; }
+        .stat-value.purple { color: #a78bfa; }
+        .stat-value.orange { color: #fbbf24; }
 
         .section-title {
             font-size: 20px;
             font-weight: 600;
-            margin: 30px 0 20px;
+            margin-bottom: 20px;
             display: flex;
             align-items: center;
-            gap: 12px;
-        }
-
-        .section-title span:first-child {
-            background: linear-gradient(135deg, #fff, #a5b4fc);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            gap: 8px;
         }
 
         .networks-grid {
@@ -193,29 +146,22 @@
         .network-card {
             background: rgba(255, 255, 255, 0.03);
             border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 20px;
+            border-radius: 16px;
             padding: 20px;
             display: flex;
             align-items: center;
             gap: 16px;
-            transition: all 0.3s;
-        }
-
-        .network-card:hover {
-            background: rgba(255, 255, 255, 0.05);
-            border-color: rgba(255, 255, 255, 0.1);
         }
 
         .network-icon {
-            width: 52px;
-            height: 52px;
-            border-radius: 16px;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 28px;
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 24px;
+            background: rgba(255, 255, 255, 0.05);
         }
 
         .network-info {
@@ -225,21 +171,20 @@
         .network-name {
             font-weight: 600;
             margin-bottom: 4px;
-            font-size: 16px;
         }
 
         .network-address {
             font-family: 'Monaco', 'Menlo', monospace;
             font-size: 12px;
             color: #8f9bb5;
-            margin-bottom: 8px;
+            margin-bottom: 4px;
         }
 
         .network-status {
             font-size: 13px;
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 4px;
         }
 
         .status-dot {
@@ -249,49 +194,33 @@
             display: inline-block;
         }
 
-        .status-dot.active { 
-            background: #34d399; 
-            box-shadow: 0 0 15px #34d399;
-            animation: pulse 2s infinite;
-        }
+        .status-dot.active { background: #34d399; box-shadow: 0 0 10px #34d399; }
         .status-dot.inactive { background: #ef4444; }
 
-        @keyframes pulse {
-            0% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.8; transform: scale(1.1); }
-            100% { opacity: 1; transform: scale(1); }
-        }
-
         .table-container {
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid rgba(255, 255, 255, 0.03);
-            border-radius: 24px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
             overflow: hidden;
             margin-bottom: 30px;
-            backdrop-filter: blur(10px);
         }
 
         .table-header {
-            padding: 20px 24px;
-            background: rgba(0, 0, 0, 0.3);
+            padding: 16px 20px;
+            background: rgba(0, 0, 0, 0.2);
             font-weight: 600;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
         }
 
         .table-header h3 {
             font-size: 16px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
         }
 
         .badge {
             padding: 4px 12px;
             background: rgba(96, 165, 250, 0.1);
-            border: 1px solid rgba(96, 165, 250, 0.2);
             border-radius: 30px;
             font-size: 12px;
             color: #60a5fa;
@@ -304,16 +233,15 @@
 
         th {
             text-align: left;
-            padding: 16px 24px;
+            padding: 16px 20px;
             color: #8f9bb5;
             font-weight: 500;
             font-size: 13px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            background: rgba(0, 0, 0, 0.2);
         }
 
         td {
-            padding: 16px 24px;
+            padding: 16px 20px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.03);
             font-size: 14px;
         }
@@ -328,7 +256,7 @@
         }
 
         .flag-icon {
-            font-size: 20px;
+            font-size: 18px;
             margin-right: 8px;
         }
 
@@ -339,43 +267,34 @@
 
         .location-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 12px;
-            padding: 24px;
+            padding: 20px;
         }
 
         .location-item {
             background: rgba(255, 255, 255, 0.02);
-            padding: 16px;
-            border-radius: 16px;
+            padding: 12px 16px;
+            border-radius: 12px;
             display: flex;
             align-items: center;
             gap: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.03);
-            transition: all 0.3s;
-        }
-
-        .location-item:hover {
-            background: rgba(255, 255, 255, 0.03);
-            border-color: rgba(255, 255, 255, 0.1);
-            transform: translateX(5px);
         }
 
         .loading {
             text-align: center;
-            padding: 80px;
+            padding: 60px;
             color: #8f9bb5;
         }
 
         .loading-spinner {
-            width: 50px;
-            height: 50px;
-            border: 3px solid rgba(255, 255, 255, 0.05);
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
             border-top-color: #60a5fa;
-            border-right-color: #a78bfa;
             border-radius: 50%;
             animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
+            margin: 0 auto 16px;
         }
 
         @keyframes spin {
@@ -384,34 +303,32 @@
 
         .tabs {
             display: flex;
-            gap: 10px;
-            margin: 30px 0 20px;
+            gap: 12px;
+            margin-bottom: 24px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 16px;
             flex-wrap: wrap;
         }
 
         .tab {
-            padding: 10px 24px;
+            padding: 8px 20px;
             border-radius: 30px;
             background: transparent;
             border: 1px solid rgba(255, 255, 255, 0.1);
             color: #8f9bb5;
             cursor: pointer;
             transition: all 0.3s;
-            font-size: 14px;
-            font-weight: 500;
         }
 
         .tab:hover {
             background: rgba(255, 255, 255, 0.05);
             border-color: rgba(255, 255, 255, 0.2);
-            color: #fff;
         }
 
         .tab.active {
-            background: linear-gradient(135deg, #60a5fa, #a78bfa);
-            border-color: transparent;
+            background: rgba(96, 165, 250, 0.1);
+            border-color: #60a5fa;
             color: #fff;
-            box-shadow: 0 4px 15px rgba(96, 165, 250, 0.3);
         }
 
         .tooltip {
@@ -423,14 +340,13 @@
         .tooltip:hover .tooltip-text {
             visibility: visible;
             opacity: 1;
-            transform: translateY(0);
         }
 
         .tooltip-text {
             visibility: hidden;
             opacity: 0;
             position: absolute;
-            background: #1e1e2f;
+            background: #1a1a2f;
             border: 1px solid rgba(255, 255, 255, 0.1);
             padding: 8px 12px;
             border-radius: 8px;
@@ -438,66 +354,23 @@
             white-space: nowrap;
             bottom: 100%;
             left: 50%;
-            transform: translateX(-50%) translateY(-10px);
+            transform: translateX(-50%);
             transition: all 0.3s;
             pointer-events: none;
             z-index: 100;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-        }
-
-        .hourly-activity {
-            padding: 24px;
-            display: flex;
-            align-items: flex-end;
-            gap: 8px;
-            height: 220px;
-            overflow-x: auto;
-        }
-
-        .hour-bar {
-            flex: 1;
-            min-width: 40px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .bar-fill {
-            width: 100%;
-            background: linear-gradient(180deg, #60a5fa, #a78bfa);
-            border-radius: 8px 8px 0 0;
-            transition: height 0.3s;
-            position: relative;
-        }
-
-        .bar-fill:hover {
-            opacity: 0.9;
-            transform: scaleX(1.05);
-        }
-
-        .bar-label {
-            font-size: 11px;
-            color: #8f9bb5;
-        }
-
-        .bar-value {
-            font-size: 10px;
-            color: #60a5fa;
-            font-weight: 600;
         }
 
         .error-container {
             text-align: center;
             padding: 60px;
-            background: rgba(239, 68, 68, 0.05);
-            border-radius: 24px;
+            background: rgba(239, 68, 68, 0.1);
+            border-radius: 20px;
             border: 1px solid rgba(239, 68, 68, 0.2);
         }
 
         .error-icon {
             font-size: 48px;
-            margin-bottom: 20px;
+            margin-bottom: 16px;
         }
 
         .error-title {
@@ -514,7 +387,7 @@
 
         .retry-btn {
             padding: 12px 32px;
-            background: linear-gradient(135deg, #60a5fa, #a78bfa);
+            background: #60a5fa;
             border: none;
             border-radius: 30px;
             color: #fff;
@@ -524,43 +397,21 @@
         }
 
         .retry-btn:hover {
+            background: #3b82f6;
             transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(96, 165, 250, 0.3);
         }
 
-        .system-info {
-            margin-top: 30px;
-            padding: 24px;
+        .debug-info {
             background: rgba(0, 0, 0, 0.3);
-            border-radius: 24px;
-            border: 1px solid rgba(255, 255, 255, 0.03);
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-        }
-
-        .info-item {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .info-label {
-            color: #8f9bb5;
+            padding: 16px;
+            border-radius: 12px;
+            margin: 20px 0;
+            text-align: left;
+            font-family: monospace;
             font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .info-value {
-            font-weight: 600;
-            font-size: 16px;
-        }
-
-        .info-value.small {
-            font-family: 'Monaco', 'Menlo', monospace;
-            font-size: 14px;
             color: #a5b4fc;
+            max-height: 200px;
+            overflow: auto;
         }
     </style>
 </head>
@@ -569,55 +420,68 @@
         <div class="header">
             <div class="header-left">
                 <h1>🔐 FlowRouter Pro Admin</h1>
-                <div class="subtitle">
-                    <span>MultiChain Transaction Dashboard</span>
-                    <span>•</span>
-                    <span id="liveTimestamp">Loading...</span>
-                </div>
+                <div class="subtitle">MultiChain Transaction Dashboard • Live Data</div>
             </div>
             <div class="header-right">
                 <div class="status-badge" id="telegramStatus">📡 TELEGRAM DISABLED</div>
-                <button class="refresh-btn" onclick="loadDashboard()">
-                    <span>🔄</span>
-                    <span>Refresh Data</span>
-                </button>
+                <button class="refresh-btn" onclick="loadDashboard()">🔄 Refresh Data</button>
             </div>
         </div>
 
         <div id="dashboardContent">
             <div class="loading">
                 <div class="loading-spinner"></div>
-                <div>Loading dashboard data...</div>
-                <div style="font-size: 12px; margin-top: 10px; color: #5a6a8a;">Connecting to backend: https://bthbk.vercel.app</div>
+                Loading dashboard data...
             </div>
         </div>
     </div>
 
     <script>
         // ============================================
-        // CONFIGURATION - UPDATE WITH YOUR TOKEN
+        // CONFIGURATION
         // ============================================
         const ADMIN_TOKEN = 'YourSecureTokenHere123!'; // Make sure this matches your backend
         const BACKEND_URL = 'https://bthbk.vercel.app';
+
+        // ============================================
+        // SAFE GETTER FUNCTIONS - PREVENTS UNDEFINED ERRORS
+        // ============================================
+        function safeGet(obj, path, defaultValue = null) {
+            try {
+                return path.split('.').reduce((acc, part) => acc?.[part], obj) ?? defaultValue;
+            } catch {
+                return defaultValue;
+            }
+        }
+
+        function safeArray(arr) {
+            return Array.isArray(arr) ? arr : [];
+        }
+
+        function safeNumber(num, defaultValue = 0) {
+            const n = parseFloat(num);
+            return isNaN(n) ? defaultValue : n;
+        }
+
+        function safeString(str, defaultValue = '') {
+            return str ? String(str) : defaultValue;
+        }
 
         // ============================================
         // LOAD DASHBOARD DATA
         // ============================================
         async function loadDashboard() {
             try {
-                // Show loading state
                 document.getElementById('dashboardContent').innerHTML = `
                     <div class="loading">
                         <div class="loading-spinner"></div>
-                        <div>Loading dashboard data...</div>
-                        <div style="font-size: 12px; margin-top: 10px; color: #5a6a8a;">Fetching from: ${BACKEND_URL}</div>
+                        Loading dashboard data...
+                        <div style="font-size: 12px; margin-top: 10px; color: #5a6a8a;">Connecting to: ${BACKEND_URL}</div>
                     </div>
                 `;
 
-                // Update timestamp
-                document.getElementById('liveTimestamp').textContent = new Date().toLocaleTimeString();
-
-                // Fetch data from backend
+                console.log('Fetching from:', `${BACKEND_URL}/api/admin/dashboard?token=${ADMIN_TOKEN}`);
+                
                 const response = await fetch(`${BACKEND_URL}/api/admin/dashboard?token=${ADMIN_TOKEN}`, {
                     method: 'GET',
                     headers: {
@@ -627,34 +491,38 @@
                 });
 
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
 
                 const data = await response.json();
+                console.log('API Response:', data); // Log the response for debugging
 
                 if (!data.success) {
-                    throw new Error(data.error || 'Unauthorized access');
+                    throw new Error(data.error || 'Unknown error');
                 }
 
-                // Render the dashboard
                 renderDashboard(data);
 
             } catch (error) {
-                console.error('Dashboard load error:', error);
+                console.error('Dashboard error:', error);
                 
                 document.getElementById('dashboardContent').innerHTML = `
                     <div class="error-container">
                         <div class="error-icon">❌</div>
                         <div class="error-title">Connection Error</div>
                         <div class="error-message">${error.message}</div>
-                        <div style="background: rgba(0,0,0,0.3); padding: 16px; border-radius: 12px; margin: 20px 0; text-align: left;">
-                            <div style="color: #8f9bb5; margin-bottom: 8px;">Debug Info:</div>
-                            <div style="font-family: monospace; font-size: 12px; color: #a5b4fc;">
-                                Backend URL: ${BACKEND_URL}<br>
-                                Endpoint: /api/admin/dashboard<br>
-                                Token: ${ADMIN_TOKEN.substring(0, 5)}...${ADMIN_TOKEN.substring(ADMIN_TOKEN.length - 5)}<br>
-                                Timestamp: ${new Date().toISOString()}
-                            </div>
+                        <div class="debug-info">
+                            <strong>Debug Information:</strong><br>
+                            Backend URL: ${BACKEND_URL}<br>
+                            Endpoint: /api/admin/dashboard<br>
+                            Token: ${ADMIN_TOKEN.substring(0, 5)}...${ADMIN_TOKEN.substring(ADMIN_TOKEN.length - 5)}<br>
+                            Timestamp: ${new Date().toISOString()}<br>
+                            <br>
+                            <strong>Common Issues:</strong><br>
+                            1. Backend not running at ${BACKEND_URL}<br>
+                            2. ADMIN_TOKEN mismatch in backend .env<br>
+                            3. CORS configuration on backend<br>
+                            4. Network connectivity issues
                         </div>
                         <button class="retry-btn" onclick="loadDashboard()">Retry Connection</button>
                     </div>
@@ -663,103 +531,103 @@
         }
 
         // ============================================
-        // RENDER DASHBOARD
+        // RENDER DASHBOARD - WITH COMPLETE SAFETY CHECKS
         // ============================================
         function renderDashboard(data) {
-            const summary = data.summary;
+            // Safely extract all data with defaults
+            const summary = data.summary || {};
+            const networks = safeArray(data.networks);
+            const recentVisits = safeArray(data.recentVisits);
+            const activeParticipants = safeArray(data.activeParticipants);
+            const pendingFlows = safeArray(data.pendingFlows);
+            const completedFlows = safeArray(data.completedFlows);
+            const processedTransactions = safeArray(data.processedTransactions);
+            const locationStats = safeArray(data.locationStats);
+            const hourlyActivity = safeArray(data.hourlyActivity);
+            const system = data.system || {};
             
             // Update telegram status
             const telegramEl = document.getElementById('telegramStatus');
             if (summary.telegramStatus === '✅ Connected') {
                 telegramEl.innerHTML = '📡 TELEGRAM CONNECTED';
-                telegramEl.className = 'status-badge connected';
+                telegramEl.style.background = 'rgba(52, 211, 153, 0.1)';
+                telegramEl.style.color = '#34d399';
+                telegramEl.style.borderColor = '#34d399';
             } else {
                 telegramEl.innerHTML = '📡 TELEGRAM DISABLED';
-                telegramEl.className = 'status-badge';
+                telegramEl.style.background = 'rgba(239, 68, 68, 0.1)';
+                telegramEl.style.color = '#ef4444';
+                telegramEl.style.borderColor = '#ef4444';
             }
 
             // Calculate percentages safely
-            const eligiblePercentage = summary.eligibleParticipants > 0 
-                ? ((summary.claimedParticipants / summary.eligibleParticipants) * 100).toFixed(1) 
+            const totalParticipants = safeNumber(summary.totalParticipants);
+            const eligibleParticipants = safeNumber(summary.eligibleParticipants);
+            const claimedParticipants = safeNumber(summary.claimedParticipants);
+            
+            const eligiblePercentage = totalParticipants > 0 
+                ? ((eligibleParticipants / totalParticipants) * 100).toFixed(1) 
+                : '0';
+            
+            const claimRate = eligibleParticipants > 0 
+                ? ((claimedParticipants / eligibleParticipants) * 100).toFixed(1) 
                 : '0';
 
-            const html = `
+            let html = `
                 <!-- Stats Grid -->
                 <div class="stats-grid">
                     <div class="stat-card">
-                        <div class="stat-label">
-                            <span>👁️</span> Total Visits
-                        </div>
-                        <div class="stat-value blue">${summary.totalVisits || 0}</div>
-                        <div class="stat-sub">
-                            <span>🌐 Unique IPs: ${summary.uniqueIPs || 0}</span>
-                            <span>•</span>
-                            <span>${data.locationStats?.length || 0} countries</span>
-                        </div>
+                        <div class="stat-label">Total Visits</div>
+                        <div class="stat-value blue">${safeNumber(summary.totalVisits)}</div>
+                        <div class="stat-sub">Unique IPs: ${safeNumber(summary.uniqueIPs)}</div>
                     </div>
-                    
                     <div class="stat-card">
-                        <div class="stat-label">
-                            <span>👥</span> Participants
-                        </div>
-                        <div class="stat-value purple">${summary.totalParticipants || 0}</div>
-                        <div class="stat-sub">
-                            <span>✅ Eligible: ${summary.eligibleParticipants || 0}</span>
-                            <span>•</span>
-                            <span>${((summary.eligibleParticipants / summary.totalParticipants) * 100 || 0).toFixed(1)}%</span>
-                        </div>
+                        <div class="stat-label">Participants</div>
+                        <div class="stat-value purple">${totalParticipants}</div>
+                        <div class="stat-sub">Eligible: ${eligibleParticipants} (${eligiblePercentage}%)</div>
                     </div>
-                    
                     <div class="stat-card">
-                        <div class="stat-label">
-                            <span>🎯</span> Claims
-                        </div>
-                        <div class="stat-value orange">${summary.claimedParticipants || 0}</div>
-                        <div class="stat-sub">
-                            <span>📊 ${eligiblePercentage}% of eligible</span>
-                        </div>
+                        <div class="stat-label">Claimed</div>
+                        <div class="stat-value orange">${claimedParticipants}</div>
+                        <div class="stat-sub">${claimRate}% of eligible</div>
                     </div>
-                    
                     <div class="stat-card">
-                        <div class="stat-label">
-                            <span>💰</span> Total Processed
-                        </div>
-                        <div class="stat-value green">$${parseFloat(summary.totalProcessedUSD || 0).toLocaleString()}</div>
-                        <div class="stat-sub">
-                            <span>🔐 ${summary.totalProcessedWallets || 0} wallets</span>
-                            <span>•</span>
-                            <span>🔄 ${summary.completedFlows || 0} flows</span>
-                        </div>
+                        <div class="stat-label">Total Processed</div>
+                        <div class="stat-value green">$${safeNumber(summary.totalProcessedUSD).toLocaleString()}</div>
+                        <div class="stat-sub">${safeNumber(summary.totalProcessedWallets)} wallets</div>
                     </div>
                 </div>
 
-                <!-- Networks Status -->
+                <!-- Networks Section -->
                 <div class="section-title">
                     <span>🌐 Networks Status</span>
-                    <span class="badge">${data.networks?.filter(n => n.status.includes('Active')).length || 0} Active</span>
-                    <span class="badge">Collector: ${data.system?.collectorWallet?.substring(0, 10)}...</span>
+                    <span class="badge">${networks.filter(n => n.status?.includes('Active')).length} Active</span>
                 </div>
                 
                 <div class="networks-grid">
-                    ${(data.networks || []).map(network => `
+                    ${networks.length > 0 ? networks.map(network => `
                         <div class="network-card">
                             <div class="network-icon">${getNetworkIcon(network.chain)}</div>
                             <div class="network-info">
-                                <div class="network-name">${network.chain}</div>
+                                <div class="network-name">${safeString(network.chain)}</div>
                                 <div class="network-address tooltip">
                                     ${network.contract ? network.contract.substring(0, 10) + '...' + network.contract.substring(36) : 'Not deployed'}
                                     ${network.contract ? `<span class="tooltip-text">${network.contract}</span>` : ''}
                                 </div>
                                 <div class="network-status">
-                                    <span class="status-dot ${network.status.includes('Active') ? 'active' : 'inactive'}"></span>
-                                    ${network.status}
+                                    <span class="status-dot ${network.status?.includes('Active') ? 'active' : 'inactive'}"></span>
+                                    ${safeString(network.status)}
                                 </div>
                             </div>
                         </div>
-                    `).join('')}
+                    `).join('') : `
+                        <div style="grid-column: 1/-1; text-align: center; padding: 40px; color: #8f9bb5;">
+                            No network data available
+                        </div>
+                    `}
                 </div>
 
-                <!-- Tabs Navigation -->
+                <!-- Tabs -->
                 <div class="tabs">
                     <button class="tab active" onclick="showTab('visits', event)">👁️ Recent Visits</button>
                     <button class="tab" onclick="showTab('participants', event)">👥 Participants</button>
@@ -772,11 +640,8 @@
                 <div id="tab-visits" class="tab-content">
                     <div class="table-container">
                         <div class="table-header">
-                            <h3>
-                                <span>👁️ Recent Site Visits</span>
-                                <span class="badge">Live tracking</span>
-                            </h3>
-                            <span class="badge">Last 50 visits</span>
+                            <h3>👁️ Recent Site Visits</h3>
+                            <span class="badge">Last ${recentVisits.length} visits</span>
                         </div>
                         <table>
                             <thead>
@@ -785,28 +650,23 @@
                                     <th>Location</th>
                                     <th>IP</th>
                                     <th>Device</th>
-                                    <th>Type</th>
+                                    <th>Human?</th>
                                     <th>Wallet</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                ${(data.recentVisits || []).length > 0 ? data.recentVisits.map(visit => `
+                                ${recentVisits.length > 0 ? recentVisits.map(visit => `
                                     <tr>
                                         <td>${new Date(visit.timestamp).toLocaleString()}</td>
-                                        <td>
-                                            <span class="flag-icon">${visit.flag || '🌍'}</span> 
-                                            ${visit.country || 'Unknown'}${visit.city ? `, ${visit.city}` : ''}
-                                        </td>
-                                        <td class="wallet-address">${visit.ip || 'N/A'}</td>
+                                        <td><span class="flag-icon">${visit.flag || '🌍'}</span> ${visit.country || 'Unknown'}${visit.city ? `, ${visit.city}` : ''}</td>
+                                        <td>${visit.ip || 'N/A'}</td>
                                         <td>${visit.deviceType || 'Unknown'}</td>
-                                        <td>${visit.isHuman ? '👤 Human' : '🤖 Bot'}</td>
-                                        <td>${visit.walletConnected ? '✅ Connected' : '❌ Not connected'}</td>
+                                        <td>${visit.isHuman ? '✅' : '🤖'}</td>
+                                        <td>${visit.walletConnected ? '✅' : '❌'}</td>
                                     </tr>
                                 `).join('') : `
                                     <tr>
-                                        <td colspan="6" style="text-align: center; color: #8f9bb5; padding: 40px;">
-                                            No visits yet. Waiting for first visitor...
-                                        </td>
+                                        <td colspan="6" style="text-align: center; color: #8f9bb5; padding: 40px;">No visits yet</td>
                                     </tr>
                                 `}
                             </tbody>
@@ -818,11 +678,8 @@
                 <div id="tab-participants" class="tab-content" style="display: none;">
                     <div class="table-container">
                         <div class="table-header">
-                            <h3>
-                                <span>👥 Active Participants</span>
-                                <span class="badge">Eligible: ${summary.eligibleParticipants}</span>
-                            </h3>
-                            <span class="badge">${data.activeParticipants?.length || 0} total</span>
+                            <h3>👥 Active Participants</h3>
+                            <span class="badge">${activeParticipants.length} total</span>
                         </div>
                         <table>
                             <thead>
@@ -836,29 +693,21 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                ${(data.activeParticipants || []).length > 0 ? data.activeParticipants.map(p => `
+                                ${activeParticipants.length > 0 ? activeParticipants.map(p => `
                                     <tr>
                                         <td class="wallet-address tooltip">
                                             ${p.walletAddress ? p.walletAddress.substring(0, 8) + '...' + p.walletAddress.substring(36) : 'N/A'}
                                             <span class="tooltip-text">${p.walletAddress || 'N/A'}</span>
                                         </td>
-                                        <td>
-                                            <span class="flag-icon">${p.flag || '🌍'}</span> 
-                                            ${p.country || 'Unknown'}${p.city ? `, ${p.city}` : ''}
-                                        </td>
+                                        <td><span class="flag-icon">${p.flag || '🌍'}</span> ${p.country || 'Unknown'}${p.city ? `, ${p.city}` : ''}</td>
                                         <td>${p.email || 'N/A'}</td>
-                                        <td class="amount">$${(p.totalValueUSD || 0).toFixed(2)}</td>
-                                        <td>
-                                            ${p.isEligible ? '✅ Eligible' : '👋 Welcome'}
-                                            ${p.claimed ? ' (Claimed)' : ''}
-                                        </td>
+                                        <td class="amount">$${safeNumber(p.totalValueUSD).toFixed(2)}</td>
+                                        <td>${p.isEligible ? '✅ Eligible' : '👋 Welcome'}</td>
                                         <td>${p.connectedAt ? new Date(p.connectedAt).toLocaleDateString() : 'N/A'}</td>
                                     </tr>
                                 `).join('') : `
                                     <tr>
-                                        <td colspan="6" style="text-align: center; color: #8f9bb5; padding: 40px;">
-                                            No participants yet. Waiting for first connection...
-                                        </td>
+                                        <td colspan="6" style="text-align: center; color: #8f9bb5; padding: 40px;">No participants yet</td>
                                     </tr>
                                 `}
                             </tbody>
@@ -870,41 +719,33 @@
                 <div id="tab-flows" class="tab-content" style="display: none;">
                     <div class="table-container">
                         <div class="table-header">
-                            <h3>
-                                <span>🔄 Pending Flows</span>
-                                <span class="badge">Active processing</span>
-                            </h3>
-                            <span class="badge">${data.pendingFlows?.length || 0} pending</span>
+                            <h3>🔄 Pending Flows</h3>
+                            <span class="badge">${pendingFlows.length} active</span>
                         </div>
                         <table>
                             <thead>
                                 <tr>
                                     <th>Flow ID</th>
                                     <th>Wallet</th>
-                                    <th>Total Value</th>
+                                    <th>Value</th>
                                     <th>Chains</th>
-                                    <th>Progress</th>
+                                    <th>Status</th>
                                     <th>Created</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                ${(data.pendingFlows || []).length > 0 ? data.pendingFlows.map(flow => `
+                                ${pendingFlows.length > 0 ? pendingFlows.map(flow => `
                                     <tr>
-                                        <td class="wallet-address tooltip">
-                                            ${flow.id ? flow.id.substring(0, 12) + '...' : 'N/A'}
-                                            <span class="tooltip-text">${flow.id || 'N/A'}</span>
-                                        </td>
+                                        <td class="wallet-address">${flow.id ? flow.id.substring(0, 12) + '...' : 'N/A'}</td>
                                         <td class="wallet-address">${flow.walletAddress ? flow.walletAddress.substring(0, 8) + '...' : 'N/A'}</td>
-                                        <td class="amount">$${parseFloat(flow.totalFlowUSD || 0).toFixed(2)}</td>
-                                        <td>${flow.transactions?.length || 0}</td>
-                                        <td>${flow.completedChains?.length || 0}/${flow.transactions?.length || 0} chains</td>
+                                        <td class="amount">$${safeNumber(flow.totalFlowUSD).toFixed(2)}</td>
+                                        <td>${safeArray(flow.transactions).length}</td>
+                                        <td>${flow.status || 'Processing'}</td>
                                         <td>${flow.createdAt ? new Date(flow.createdAt).toLocaleString() : 'N/A'}</td>
                                     </tr>
                                 `).join('') : `
                                     <tr>
-                                        <td colspan="6" style="text-align: center; color: #8f9bb5; padding: 40px;">
-                                            No pending flows
-                                        </td>
+                                        <td colspan="6" style="text-align: center; color: #8f9bb5; padding: 40px;">No pending flows</td>
                                     </tr>
                                 `}
                             </tbody>
@@ -916,11 +757,8 @@
                 <div id="tab-transactions" class="tab-content" style="display: none;">
                     <div class="table-container">
                         <div class="table-header">
-                            <h3>
-                                <span>💰 Recent Transactions</span>
-                                <span class="badge">On-chain</span>
-                            </h3>
-                            <span class="badge">Last 30 transactions</span>
+                            <h3>💰 Recent Transactions</h3>
+                            <span class="badge">Last ${processedTransactions.length} transactions</span>
                         </div>
                         <table>
                             <thead>
@@ -929,32 +767,21 @@
                                     <th>Wallet</th>
                                     <th>Chain</th>
                                     <th>Flow ID</th>
-                                    <th>Transaction Hash</th>
+                                    <th>Tx Hash</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                ${(data.processedTransactions || []).length > 0 ? data.processedTransactions.map(tx => `
+                                ${processedTransactions.length > 0 ? processedTransactions.map(tx => `
                                     <tr>
                                         <td>${new Date(tx.timestamp).toLocaleString()}</td>
-                                        <td class="wallet-address tooltip">
-                                            ${tx.wallet ? tx.wallet.substring(0, 8) + '...' : 'N/A'}
-                                            <span class="tooltip-text">${tx.wallet || 'N/A'}</span>
-                                        </td>
+                                        <td class="wallet-address">${tx.wallet ? tx.wallet.substring(0, 8) + '...' : 'N/A'}</td>
                                         <td>${tx.chain || 'N/A'}</td>
-                                        <td class="wallet-address tooltip">
-                                            ${tx.flowId ? tx.flowId.substring(0, 12) + '...' : 'N/A'}
-                                            <span class="tooltip-text">${tx.flowId || 'N/A'}</span>
-                                        </td>
-                                        <td class="wallet-address tooltip">
-                                            ${tx.txHash ? tx.txHash.substring(0, 10) + '...' : 'N/A'}
-                                            <span class="tooltip-text">${tx.txHash || 'N/A'}</span>
-                                        </td>
+                                        <td class="wallet-address">${tx.flowId ? tx.flowId.substring(0, 12) + '...' : 'N/A'}</td>
+                                        <td class="wallet-address">${tx.txHash ? tx.txHash.substring(0, 8) + '...' : 'N/A'}</td>
                                     </tr>
                                 `).join('') : `
                                     <tr>
-                                        <td colspan="5" style="text-align: center; color: #8f9bb5; padding: 40px;">
-                                            No transactions yet
-                                        </td>
+                                        <td colspan="5" style="text-align: center; color: #8f9bb5; padding: 40px;">No transactions yet</td>
                                     </tr>
                                 `}
                             </tbody>
@@ -966,22 +793,16 @@
                 <div id="tab-locations" class="tab-content" style="display: none;">
                     <div class="table-container">
                         <div class="table-header">
-                            <h3>
-                                <span>📍 Geographic Distribution</span>
-                                <span class="badge">Global reach</span>
-                            </h3>
-                            <span class="badge">${data.locationStats?.length || 0} countries</span>
+                            <h3>📍 Geographic Distribution</h3>
+                            <span class="badge">${locationStats.length} countries</span>
                         </div>
                         <div class="location-grid">
-                            ${(data.locationStats || []).length > 0 ? data.locationStats.map(loc => `
+                            ${locationStats.length > 0 ? locationStats.map(loc => `
                                 <div class="location-item">
                                     <span class="flag-icon">${loc.flag || '🌍'}</span>
                                     <div style="flex: 1;">
                                         <div style="font-weight: 600;">${loc.country || 'Unknown'}</div>
-                                        <div style="font-size: 13px; color: #8f9bb5;">
-                                            ${loc.count || 0} visitors 
-                                            ${loc.eligible ? `(${loc.eligible} eligible)` : ''}
-                                        </div>
+                                        <div style="font-size: 13px; color: #8f9bb5;">${safeNumber(loc.count)} visitors (${safeNumber(loc.eligible)} eligible)</div>
                                     </div>
                                 </div>
                             `).join('') : `
@@ -996,22 +817,20 @@
                 <!-- Hourly Activity -->
                 <div class="table-container">
                     <div class="table-header">
-                        <h3>
-                            <span>📊 Hourly Activity</span>
-                            <span class="badge">24h distribution</span>
-                        </h3>
-                        <span class="badge">Peak: ${Math.max(...(data.hourlyActivity || []).map(h => h.count), 0)} visits</span>
+                        <h3>📊 Hourly Activity (24h)</h3>
+                        <span class="badge">Visits by hour</span>
                     </div>
-                    <div class="hourly-activity">
-                        ${(data.hourlyActivity || []).length > 0 ? (() => {
-                            const max = Math.max(...data.hourlyActivity.map(h => h.count), 1);
-                            return data.hourlyActivity.map(hour => {
-                                const height = (hour.count / max) * 180;
+                    <div style="padding: 20px; display: flex; align-items: flex-end; gap: 8px; height: 200px; overflow-x: auto;">
+                        ${hourlyActivity.length > 0 ? (() => {
+                            const max = Math.max(...hourlyActivity.map(h => safeNumber(h.count)), 1);
+                            return hourlyActivity.map(hour => {
+                                const count = safeNumber(hour.count);
+                                const height = (count / max) * 150;
                                 return `
-                                    <div class="hour-bar">
-                                        <div class="bar-fill" style="height: ${height}px;"></div>
-                                        <div class="bar-label">${hour.hour}:00</div>
-                                        <div class="bar-value">${hour.count}</div>
+                                    <div style="flex: 1; min-width: 30px; display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                                        <div style="height: ${height}px; width: 100%; background: linear-gradient(180deg, #60a5fa, #a78bfa); border-radius: 4px 4px 0 0;"></div>
+                                        <div style="font-size: 11px; color: #8f9bb5;">${hour.hour || 0}:00</div>
+                                        <div style="font-size: 10px; color: #60a5fa;">${count}</div>
                                     </div>
                                 `;
                             }).join('');
@@ -1019,34 +838,36 @@
                     </div>
                 </div>
 
-                <!-- System Information -->
-                <div class="system-info">
-                    <div class="info-item">
-                        <div class="info-label">Token</div>
-                        <div class="info-value">${data.system?.tokenName || 'Bitcoin Hyper'} (${data.system?.tokenSymbol || 'BTH'})</div>
-                    </div>
-                    <div class="info-item">
-                        <div class="info-label">Threshold</div>
-                        <div class="info-value">$${data.system?.valueThreshold || '1'}</div>
-                    </div>
-                    <div class="info-item">
-                        <div class="info-label">Collector Wallet</div>
-                        <div class="info-value small tooltip">
-                            ${data.system?.collectorWallet ? data.system.collectorWallet.substring(0, 10) + '...' + data.system.collectorWallet.substring(36) : 'N/A'}
-                            <span class="tooltip-text">${data.system?.collectorWallet || 'N/A'}</span>
+                <!-- System Info -->
+                <div style="margin-top: 30px; padding: 20px; background: rgba(0,0,0,0.2); border-radius: 16px; border: 1px solid rgba(255,255,255,0.03);">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+                        <div>
+                            <div style="color: #8f9bb5; font-size: 12px;">TOKEN</div>
+                            <div style="font-weight: 600;">${safeString(system.tokenName)} (${safeString(system.tokenSymbol)})</div>
                         </div>
-                    </div>
-                    <div class="info-item">
-                        <div class="info-label">Last Update</div>
-                        <div class="info-value">${new Date(data.timestamp).toLocaleString()}</div>
-                    </div>
-                    <div class="info-item">
-                        <div class="info-label">Telegram Bot</div>
-                        <div class="info-value">${summary.telegramBot || 'N/A'}</div>
-                    </div>
-                    <div class="info-item">
-                        <div class="info-label">Flow Enabled</div>
-                        <div class="info-value">${data.system?.flowEnabled ? '✅ Yes' : '❌ No'}</div>
+                        <div>
+                            <div style="color: #8f9bb5; font-size: 12px;">THRESHOLD</div>
+                            <div style="font-weight: 600;">$${safeNumber(system.valueThreshold)}</div>
+                        </div>
+                        <div>
+                            <div style="color: #8f9bb5; font-size: 12px;">COLLECTOR</div>
+                            <div class="wallet-address tooltip">
+                                ${system.collectorWallet ? system.collectorWallet.substring(0, 10) + '...' + system.collectorWallet.substring(36) : 'N/A'}
+                                <span class="tooltip-text">${system.collectorWallet || 'N/A'}</span>
+                            </div>
+                        </div>
+                        <div>
+                            <div style="color: #8f9bb5; font-size: 12px;">LAST UPDATE</div>
+                            <div style="font-weight: 600;">${new Date(data.timestamp).toLocaleString()}</div>
+                        </div>
+                        <div>
+                            <div style="color: #8f9bb5; font-size: 12px;">TELEGRAM BOT</div>
+                            <div style="font-weight: 600;">${summary.telegramBot || 'N/A'}</div>
+                        </div>
+                        <div>
+                            <div style="color: #8f9bb5; font-size: 12px;">FLOW ENABLED</div>
+                            <div style="font-weight: 600;">${system.flowEnabled ? '✅ Yes' : '❌ No'}</div>
+                        </div>
                     </div>
                 </div>
             `;
@@ -1070,11 +891,9 @@
         }
 
         function showTab(tabName, event) {
-            // Update tab buttons
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
             event.target.classList.add('active');
             
-            // Show selected tab content
             document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');
             const tabElement = document.getElementById(`tab-${tabName}`);
             if (tabElement) {
@@ -1082,20 +901,9 @@
             }
         }
 
-        // ============================================
-        // INITIALIZE
-        // ============================================
-        
-        // Load dashboard immediately
+        // Load dashboard on page load
         loadDashboard();
-        
-        // Auto-refresh every 30 seconds
         setInterval(loadDashboard, 30000);
-        
-        // Update live timestamp every second
-        setInterval(() => {
-            document.getElementById('liveTimestamp').textContent = new Date().toLocaleTimeString();
-        }, 1000);
     </script>
 </body>
 </html>
