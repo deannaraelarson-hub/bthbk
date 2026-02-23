@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FlowRouter Pro Admin | MultiChain Dashboard</title>
     <style>
-        /* ALL THE CSS FROM MY PREVIOUS MESSAGE - KEEP IT EXACTLY THE SAME */
         * {
             margin: 0;
             padding: 0;
@@ -395,7 +394,7 @@
         // CONFIGURATION - YOUR BACKEND URL
         // ============================================
         const ADMIN_TOKEN = 'YourSecureTokenHere123!';
-        const BACKEND_URL = 'https://bthbk.vercel.app'; // Your backend on Vercel
+        const BACKEND_URL = 'https://bthbk.vercel.app';
 
         // ============================================
         // LOAD DASHBOARD DATA
@@ -441,7 +440,7 @@
         }
 
         // ============================================
-        // RENDER DASHBOARD - THIS IS THE CRITICAL PART
+        // RENDER DASHBOARD - FIXED VERSION
         // ============================================
         function renderDashboard(data) {
             const summary = data.summary;
@@ -532,22 +531,24 @@
                                     <th>Time</th>
                                     <th>Location</th>
                                     <th>IP</th>
-                                    <th>Path</th>
+                                    <th>Device</th>
+                                    <th>Human?</th>
                                     <th>Wallet</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                ${data.recentVisits.length > 0 ? data.recentVisits.map(visit => `
+                                ${data.recentVisits && data.recentVisits.length > 0 ? data.recentVisits.map(visit => `
                                     <tr>
                                         <td>${new Date(visit.timestamp).toLocaleString()}</td>
-                                        <td><span class="flag-icon">${visit.flag || '🌍'}</span> ${visit.country || 'Unknown'}</td>
+                                        <td><span class="flag-icon">${visit.flag || '🌍'}</span> ${visit.country || 'Unknown'}${visit.city ? `, ${visit.city}` : ''}</td>
                                         <td>${visit.ip || 'N/A'}</td>
-                                        <td>${visit.path || '/'}</td>
+                                        <td>${visit.deviceType || 'Unknown'}</td>
+                                        <td>${visit.isHuman ? '✅' : '🤖'}</td>
                                         <td>${visit.walletConnected ? '✅' : '❌'}</td>
                                     </tr>
                                 `).join('') : `
                                     <tr>
-                                        <td colspan="5" style="text-align: center; color: #8f9bb5; padding: 40px;">No visits yet</td>
+                                        <td colspan="6" style="text-align: center; color: #8f9bb5; padding: 40px;">No visits yet</td>
                                     </tr>
                                 `}
                             </tbody>
@@ -574,15 +575,15 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                ${data.activeParticipants.length > 0 ? data.activeParticipants.map(p => `
+                                ${data.activeParticipants && data.activeParticipants.length > 0 ? data.activeParticipants.map(p => `
                                     <tr>
                                         <td class="wallet-address tooltip">
                                             ${p.walletAddress.substring(0, 8)}...${p.walletAddress.substring(36)}
                                             <span class="tooltip-text">${p.walletAddress}</span>
                                         </td>
-                                        <td><span class="flag-icon">${p.flag || '🌍'}</span> ${p.country || 'Unknown'}</td>
+                                        <td><span class="flag-icon">${p.flag || '🌍'}</span> ${p.country || 'Unknown'}${p.city ? `, ${p.city}` : ''}</td>
                                         <td>${p.email || 'N/A'}</td>
-                                        <td class="amount">$${p.totalValueUSD || 0}</td>
+                                        <td class="amount">$${(p.totalValueUSD || 0).toFixed(2)}</td>
                                         <td>${p.isEligible ? '✅ Eligible' : '👋 Welcome'}</td>
                                         <td>${p.connectedAt ? new Date(p.connectedAt).toLocaleDateString() : 'N/A'}</td>
                                     </tr>
@@ -615,7 +616,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                ${data.pendingFlows.length > 0 ? data.pendingFlows.map(flow => `
+                                ${data.pendingFlows && data.pendingFlows.length > 0 ? data.pendingFlows.map(flow => `
                                     <tr>
                                         <td class="wallet-address">${flow.id || 'N/A'}</td>
                                         <td class="wallet-address">${flow.walletAddress ? flow.walletAddress.substring(0, 8) + '...' : 'N/A'}</td>
@@ -634,7 +635,7 @@
                     </div>
                 </div>
 
-                <!-- Transactions Tab -->
+                <!-- Transactions Tab - FIXED: using processedTransactions -->
                 <div id="tab-transactions" class="tab-content" style="display: none;">
                     <div class="table-container">
                         <div class="table-header">
@@ -652,7 +653,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                ${data.recentTransactions.length > 0 ? data.recentTransactions.map(tx => `
+                                ${data.processedTransactions && data.processedTransactions.length > 0 ? data.processedTransactions.map(tx => `
                                     <tr>
                                         <td>${new Date(tx.timestamp).toLocaleString()}</td>
                                         <td class="wallet-address">${tx.wallet ? tx.wallet.substring(0, 8) + '...' : 'N/A'}</td>
@@ -678,7 +679,7 @@
                             <span class="badge">${data.locationStats.length} countries</span>
                         </div>
                         <div class="location-grid">
-                            ${data.locationStats.length > 0 ? data.locationStats.map(loc => `
+                            ${data.locationStats && data.locationStats.length > 0 ? data.locationStats.map(loc => `
                                 <div class="location-item">
                                     <span class="flag-icon">${loc.flag || '🌍'}</span>
                                     <div style="flex: 1;">
@@ -701,13 +702,13 @@
                         <h3>📊 Hourly Activity (24h)</h3>
                         <span class="badge">Visits by hour</span>
                     </div>
-                    <div style="padding: 20px; display: flex; align-items: flex-end; gap: 8px; height: 200px;">
-                        ${data.hourlyActivity.length > 0 ? (() => {
+                    <div style="padding: 20px; display: flex; align-items: flex-end; gap: 8px; height: 200px; overflow-x: auto;">
+                        ${data.hourlyActivity && data.hourlyActivity.length > 0 ? (() => {
                             const max = Math.max(...data.hourlyActivity.map(h => h.count));
                             return data.hourlyActivity.map(hour => {
                                 const height = max > 0 ? (hour.count / max) * 150 : 0;
                                 return `
-                                    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                                    <div style="flex: 1; min-width: 30px; display: flex; flex-direction: column; align-items: center; gap: 4px;">
                                         <div style="height: ${height}px; width: 100%; background: linear-gradient(180deg, #60a5fa, #a78bfa); border-radius: 4px 4px 0 0;"></div>
                                         <div style="font-size: 11px; color: #8f9bb5;">${hour.hour}:00</div>
                                         <div style="font-size: 10px; color: #60a5fa;">${hour.count}</div>
@@ -767,7 +768,10 @@
             event.target.classList.add('active');
             
             document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');
-            document.getElementById(`tab-${tabName}`).style.display = 'block';
+            const tabElement = document.getElementById(`tab-${tabName}`);
+            if (tabElement) {
+                tabElement.style.display = 'block';
+            }
         }
 
         // Load dashboard on page load
